@@ -1,0 +1,211 @@
+<!-- HEADER -->
+<header>
+  <a class="logo" href="#">
+    <div class="logo-icon">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="14" stroke="#00ffa3" stroke-width="1.2" opacity="0.4"/>
+        <circle cx="16" cy="10" r="3.5" fill="#00ffa3" opacity="0.9"/>
+        <circle cx="8" cy="22" r="3" fill="#38d4f5" opacity="0.8"/>
+        <circle cx="24" cy="22" r="3" fill="#a78bfa" opacity="0.8"/>
+        <line x1="16" y1="13.5" x2="8.5" y2="19.5" stroke="#00ffa3" stroke-width="1" opacity="0.5"/>
+        <line x1="16" y1="13.5" x2="23.5" y2="19.5" stroke="#00ffa3" stroke-width="1" opacity="0.5"/>
+        <line x1="9" y1="22" x2="21" y2="22" stroke="#38d4f5" stroke-width="1" opacity="0.4" stroke-dasharray="2 2"/>
+      </svg>
+    </div>
+    <span class="logo-text">Git<span>Mind</span></span>
+  </a>
+  <div class="header-right">
+    <div class="loop-indicator" [class.visible]="refinementCount() > 0">
+      <span>↻</span><span>Refinement loop</span><span class="loop-count">×{{ refinementCount() }}</span>
+    </div>
+    <span class="header-badge">LangGraph · v2.1</span>
+    <div class="status-dot"><div class="dot"></div><span>Agent online</span></div>
+  </div>
+</header>
+
+<!-- APP -->
+<div class="app">
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <svg class="panel-title-icon" viewBox="0 0 18 18" fill="none">
+          <rect x="1" y="2" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M5 6h8M5 9h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        PR Diff Input
+      </div>
+      <button class="panel-action example-btn" (click)="loadExample()">Load example diff ↗</button>
+    </div>
+    <div class="input-section">
+      <div class="url-row">
+        <input class="url-input" [(ngModel)]="prUrl" placeholder="github.com/owner/repo/pull/42  (optional)" autocomplete="off"/>
+        <button class="fetch-btn" (click)="fetchPrDiff()">Set PR</button>
+      </div>
+      <div class="divider-row">
+        <div class="divider-line"></div>
+        <span>or paste diff below</span>
+        <div class="divider-line"></div>
+      </div>
+      <textarea class="diff-area" [(ngModel)]="diffInput" placeholder="Paste your GitHub PR diff here..."></textarea>
+      
+      <div class="options-row">
+        <label class="option-chip">
+          <input type="checkbox" [(ngModel)]="opts.security"/>
+          <span class="option-label">🔐 Security scan</span>
+        </label>
+        <label class="option-chip">
+          <input type="checkbox" [(ngModel)]="opts.performance"/>
+          <span class="option-label">⚡ Perf analysis</span>
+        </label>
+        <label class="option-chip">
+          <input type="checkbox" [(ngModel)]="opts.style"/>
+          <span class="option-label">🎨 Style review</span>
+        </label>
+        <label class="option-chip">
+          <input type="checkbox" [(ngModel)]="opts.selfCritique"/>
+          <span class="option-label">🧠 Self-critique</span>
+        </label>
+      </div>
+      
+      <button class="analyze-btn" [disabled]="isAnalyzing()" (click)="startAnalysis()">
+        <span>{{ isAnalyzing() ? '⏳ Analyzing...' : '⚡ Analyze Pull Request' }}</span>
+      </button>
+    </div>
+
+    <!-- PIPELINE -->
+    <div class="pipeline-section">
+      <div class="section-label">LangGraph State Machine</div>
+      <div class="pipeline">
+        <div class="pipe-node" [class]="nodeStates()['input']">
+          <div class="node-circle"><div class="node-spin"></div><span>📥</span></div>
+          <div class="node-label">Input<br>Parse</div>
+        </div>
+        <div class="pipe-node" [class]="nodeStates()['review']">
+          <div class="node-circle"><div class="node-spin"></div><span>🔍</span></div>
+          <div class="node-label">Initial<br>Review</div>
+        </div>
+        <div class="pipe-node" [class]="nodeStates()['critique']">
+          <div class="node-circle"><div class="node-spin"></div><span>🧠</span></div>
+          <div class="node-label">Self<br>Critique</div>
+        </div>
+        <div class="pipe-node" [class]="nodeStates()['refine']">
+          <div class="node-circle"><div class="node-spin"></div><span>🔄</span></div>
+          <div class="node-label">Refine<br>Loop</div>
+        </div>
+        <div class="pipe-node" [class]="nodeStates()['output']">
+          <div class="node-circle"><div class="node-spin"></div><span>✅</span></div>
+          <div class="node-label">Final<br>Output</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="log-section" style="padding-bottom:20px">
+      <div class="section-label" style="padding:14px 0 0">Agent Activity Log</div>
+      <div class="log-box">
+        <div class="log-line" *ngFor="let log of logs()">
+          <span class="log-time">{{ log.time }}</span>
+          <span class="log-msg" [ngClass]="log.type">{{ log.msg }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        Review Report
+      </div>
+    </div>
+    
+    <div class="results-area">
+      <!-- Placeholder -->
+      <div class="results-placeholder" *ngIf="!analysisData()">
+        <div class="placeholder-icon">🔎</div>
+        <div class="placeholder-text">Paste a PR diff and click Analyze...</div>
+      </div>
+
+      <!-- Results Content -->
+      <div class="results-content" *ngIf="analysisData()">
+        <div class="tabs-bar">
+          <div class="tab" [class.active]="currentTab() === 'summary'" (click)="switchTab('summary')">📋 Summary</div>
+          <div class="tab" [class.active]="currentTab() === 'security'" (click)="switchTab('security')">🔐 Security</div>
+          <div class="tab" [class.active]="currentTab() === 'performance'" (click)="switchTab('performance')">⚡ Performance</div>
+          <div class="tab" [class.active]="currentTab() === 'style'" (click)="switchTab('style')">🎨 Style</div>
+          <div class="tab" [class.active]="currentTab() === 'report'" (click)="switchTab('report')">📄 Raw Report</div>
+        </div>
+
+        <div class="tab-panels">
+          <!-- Summary Panel -->
+          <div class="tab-panel" [class.active]="currentTab() === 'summary'">
+            <div class="approval-banner" [ngClass]="getApprovalInfo()?.cls">
+               <div class="approval-icon">{{ getApprovalInfo()?.icon }}</div>
+               <div>
+                 <div class="approval-title">{{ getApprovalInfo()?.label }}</div>
+                 <div class="approval-sub">{{ getApprovalInfo()?.sub }}</div>
+               </div>
+            </div>
+            <div class="summary-box">
+              {{ analysisData()?.summary }}
+            </div>
+          </div>
+          
+          <!-- Category Panels -->
+          <div class="tab-panel" [class.active]="currentTab() === 'security'">
+            <div *ngIf="analysisData()?.security?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No security issues found.</div>
+            <div *ngFor="let item of analysisData()?.security" class="review-card open">
+              <div class="review-card-header">
+                <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
+                <span class="card-issue">{{ item.issue }}</span>
+              </div>
+              <div class="review-card-body">
+                <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
+                <div class="fix-label">💡 Suggested fix:</div>
+                <div class="fix-text">{{ item.fix }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" [class.active]="currentTab() === 'performance'">
+            <div *ngIf="analysisData()?.performance?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No performance issues found.</div>
+            <div *ngFor="let item of analysisData()?.performance" class="review-card open">
+              <div class="review-card-header">
+                <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
+                <span class="card-issue">{{ item.issue }}</span>
+              </div>
+              <div class="review-card-body">
+                <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
+                <div class="fix-label">💡 Suggested fix:</div>
+                <div class="fix-text">{{ item.fix }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" [class.active]="currentTab() === 'style'">
+            <div *ngIf="analysisData()?.style?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No style issues found.</div>
+            <div *ngFor="let item of analysisData()?.style" class="review-card open">
+              <div class="review-card-header">
+                <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
+                <span class="card-issue">{{ item.issue }}</span>
+              </div>
+              <div class="review-card-body">
+                <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
+                <div class="fix-label">💡 Suggested fix:</div>
+                <div class="fix-text">{{ item.fix }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" [class.active]="currentTab() === 'report'">
+            <div class="markdown-report">{{ buildMarkdownReport() }}</div>
+            <div class="export-row">
+              <button class="export-btn" (click)="copyReport()">📋 Copy Markdown</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

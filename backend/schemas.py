@@ -1,0 +1,37 @@
+from pydantic import BaseModel, Field
+from typing import List, Optional, Literal
+
+class ReviewItem(BaseModel):
+    issue: str = Field(description="Brief description of the issue found")
+    severity: Literal["high", "medium", "low"] = Field(description="The impact of the issue")
+    line: Optional[str] = Field(description="The relevant line of code from the diff")
+    fix: str = Field(description="Actionable suggestion to fix the issue")
+
+class ReviewReport(BaseModel):
+    security: List[ReviewItem] = Field(default_factory=list)
+    performance: List[ReviewItem] = Field(default_factory=list)
+    style: List[ReviewItem] = Field(default_factory=list)
+    summary: str = Field(description="2-3 sentence executive summary of the review")
+    approval_status: Literal["approved", "needs_changes", "rejected"] = Field(description="Final verdict")
+    confidence_score: int = Field(ge=0, le=100, description="Confidence in the review quality")
+
+class CritiqueResult(BaseModel):
+    accurate: bool = Field(description="Is the feedback factually correct based on the diff?")
+    constructive: bool = Field(description="Is the tone professional and helpful?")
+    score: int = Field(ge=0, le=100, description="Overall quality score of the review")
+    feedback: Optional[str] = Field(description="Specific instructions for the refinement loop")
+
+class AgentState(BaseModel):
+    diff: Optional[str] = ""
+    github_url: Optional[str] = None
+    security_scan: bool = True
+    perf_analysis: bool = True
+    style_review: bool = True
+    self_critique: bool = True
+    
+    # Internal state
+    reviews: Optional[ReviewReport] = None
+    critique: Optional[CritiqueResult] = None
+    refinement_count: int = 0
+    final_markdown: str = ""
+    status: str = "idle"
