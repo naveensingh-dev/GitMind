@@ -57,9 +57,29 @@ header{
 .header-link:hover{color:var(--text)}
 
 /* ──── LAYOUT ──── */
-.app{position:relative;z-index:1;display:grid;grid-template-columns:460px 1fr;grid-template-rows:auto 1fr;min-height:calc(100vh - 60px);gap:0}
-.left-panel{border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:calc(100vh - 60px)}
-.right-panel{display:flex;flex-direction:column;min-height:calc(100vh - 60px)}
+.app{
+  position:relative;z-index:1;
+  display:grid;grid-template-columns:460px 1fr;
+  height:calc(100vh - 60px);
+  overflow: hidden;
+}
+.left-panel{
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  height: 100%;
+  overflow-y: auto;
+}
+.right-panel{
+  display:flex;flex-direction:column;
+  height: 100%;
+  overflow: hidden;
+}
+.results-area {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
 
 /* ──── INPUT PANEL ──── */
 .panel-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px 14px;border-bottom:1px solid var(--border)}

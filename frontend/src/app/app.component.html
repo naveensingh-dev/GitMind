@@ -62,7 +62,8 @@
         </label>
       </div>
       
-      <button class="analyze-btn" [disabled]="isAnalyzing()" (click)="startAnalysis()" style="margin-top: 10px;">
+      <!-- Analyze Button: Only Shown when diff exists -->
+      <button *ngIf="diffInput()" class="analyze-btn" [disabled]="isAnalyzing()" (click)="startAnalysis()" style="margin-top: 10px;">
         <span>{{ isAnalyzing() ? '⏳ Running...' : '⚡ Analyze PR' }}</span>
       </button>
     </div>
