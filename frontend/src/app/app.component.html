@@ -33,76 +33,70 @@
           <rect x="1" y="2" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.2"/>
           <path d="M5 6h8M5 9h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
         </svg>
-        PR Diff Input
+        Agent Controls
       </div>
-      <button class="panel-action example-btn" (click)="loadExample()">Load example diff ↗</button>
+      <button class="panel-action example-btn" (click)="loadExample()">Load example ↗</button>
     </div>
     <div class="input-section">
       <div class="url-row">
-        <input class="url-input" [(ngModel)]="prUrl" placeholder="github.com/owner/repo/pull/42  (optional)" autocomplete="off"/>
-        <button class="fetch-btn" (click)="fetchPrDiff()">Set PR</button>
+        <input class="url-input" [(ngModel)]="prUrl" placeholder="github.com/owner/repo/pull/42" autocomplete="off"/>
+        <button class="fetch-btn" (click)="fetchPrDiff()">Fetch</button>
       </div>
-      <div class="divider-row">
-        <div class="divider-line"></div>
-        <span>or paste diff below</span>
-        <div class="divider-line"></div>
-      </div>
-      <textarea class="diff-area" [(ngModel)]="diffInput" placeholder="Paste your GitHub PR diff here..."></textarea>
       
-      <div class="options-row">
+      <div class="options-row" style="margin-top: 10px;">
         <label class="option-chip">
           <input type="checkbox" [(ngModel)]="opts.security"/>
-          <span class="option-label">🔐 Security scan</span>
+          <span class="option-label">🔐 Security</span>
         </label>
         <label class="option-chip">
           <input type="checkbox" [(ngModel)]="opts.performance"/>
-          <span class="option-label">⚡ Perf analysis</span>
+          <span class="option-label">⚡ Perf</span>
         </label>
         <label class="option-chip">
           <input type="checkbox" [(ngModel)]="opts.style"/>
-          <span class="option-label">🎨 Style review</span>
+          <span class="option-label">🎨 Style</span>
         </label>
         <label class="option-chip">
           <input type="checkbox" [(ngModel)]="opts.selfCritique"/>
-          <span class="option-label">🧠 Self-critique</span>
+          <span class="option-label">🧠 Critique</span>
         </label>
       </div>
       
-      <button class="analyze-btn" [disabled]="isAnalyzing()" (click)="startAnalysis()">
-        <span>{{ isAnalyzing() ? '⏳ Analyzing...' : '⚡ Analyze Pull Request' }}</span>
+      <button class="analyze-btn" [disabled]="isAnalyzing()" (click)="startAnalysis()" style="margin-top: 10px;">
+        <span>{{ isAnalyzing() ? '⏳ Running...' : '⚡ Analyze PR' }}</span>
       </button>
     </div>
 
     <!-- PIPELINE -->
     <div class="pipeline-section">
-      <div class="section-label">LangGraph State Machine</div>
+      <div class="section-label">State Machine</div>
       <div class="pipeline">
         <div class="pipe-node" [class]="nodeStates()['input']">
           <div class="node-circle"><div class="node-spin"></div><span>📥</span></div>
-          <div class="node-label">Input<br>Parse</div>
+          <div class="node-label">Parse</div>
         </div>
         <div class="pipe-node" [class]="nodeStates()['review']">
           <div class="node-circle"><div class="node-spin"></div><span>🔍</span></div>
-          <div class="node-label">Initial<br>Review</div>
+          <div class="node-label">Review</div>
         </div>
         <div class="pipe-node" [class]="nodeStates()['critique']">
           <div class="node-circle"><div class="node-spin"></div><span>🧠</span></div>
-          <div class="node-label">Self<br>Critique</div>
+          <div class="node-label">Critique</div>
         </div>
         <div class="pipe-node" [class]="nodeStates()['refine']">
           <div class="node-circle"><div class="node-spin"></div><span>🔄</span></div>
-          <div class="node-label">Refine<br>Loop</div>
+          <div class="node-label">Refine</div>
         </div>
         <div class="pipe-node" [class]="nodeStates()['output']">
           <div class="node-circle"><div class="node-spin"></div><span>✅</span></div>
-          <div class="node-label">Final<br>Output</div>
+          <div class="node-label">Final</div>
         </div>
       </div>
     </div>
 
     <!-- LOG -->
     <div class="log-section" style="padding-bottom:20px">
-      <div class="section-label" style="padding:14px 0 0">Agent Activity Log</div>
+      <div class="section-label" style="padding:14px 0 0">Activity Log</div>
       <div class="log-box">
         <div class="log-line" *ngFor="let log of logs()">
           <span class="log-time">{{ log.time }}</span>
@@ -116,28 +110,40 @@
   <div class="right-panel">
     <div class="panel-header">
       <div class="panel-title">
-        Review Report
+        Code & Review Report
       </div>
     </div>
     
     <div class="results-area">
-      <!-- Placeholder -->
-      <div class="results-placeholder" *ngIf="!analysisData()">
-        <div class="placeholder-icon">🔎</div>
-        <div class="placeholder-text">Paste a PR diff and click Analyze...</div>
+      <!-- Placeholder when nothing is loaded -->
+      <div class="results-placeholder" *ngIf="!diffInput() && !analysisData()">
+        <div class="placeholder-icon">🚀</div>
+        <div class="placeholder-text">Enter a GitHub URL or load an example<br>to begin the automated code review.</div>
       </div>
 
-      <!-- Results Content -->
-      <div class="results-content" *ngIf="analysisData()">
+      <!-- Main Content Area -->
+      <div class="results-content" *ngIf="diffInput() || analysisData()">
         <div class="tabs-bar">
-          <div class="tab" [class.active]="currentTab() === 'summary'" (click)="switchTab('summary')">📋 Summary</div>
-          <div class="tab" [class.active]="currentTab() === 'security'" (click)="switchTab('security')">🔐 Security</div>
-          <div class="tab" [class.active]="currentTab() === 'performance'" (click)="switchTab('performance')">⚡ Performance</div>
-          <div class="tab" [class.active]="currentTab() === 'style'" (click)="switchTab('style')">🎨 Style</div>
-          <div class="tab" [class.active]="currentTab() === 'report'" (click)="switchTab('report')">📄 Raw Report</div>
+          <div class="tab" [class.active]="currentTab() === 'diff'" (click)="switchTab('diff')">🔍 Diff</div>
+          <div class="tab" [class.active]="currentTab() === 'summary'" (click)="switchTab('summary')" *ngIf="analysisData()">📋 Summary</div>
+          <div class="tab" [class.active]="currentTab() === 'security'" (click)="switchTab('security')" *ngIf="analysisData()">🔐 Security</div>
+          <div class="tab" [class.active]="currentTab() === 'performance'" (click)="switchTab('performance')" *ngIf="analysisData()">⚡ Performance</div>
+          <div class="tab" [class.active]="currentTab() === 'style'" (click)="switchTab('style')" *ngIf="analysisData()">🎨 Style</div>
+          <div class="tab" [class.active]="currentTab() === 'report'" (click)="switchTab('report')" *ngIf="analysisData()">📄 Raw Report</div>
         </div>
 
         <div class="tab-panels">
+          <!-- Diff Tab -->
+          <div class="tab-panel" [class.active]="currentTab() === 'diff'">
+            <div class="diff-viewer-container" style="border: none; max-height: unset; min-height: unset;">
+              <div class="rich-diff-view">
+                <div *ngFor="let line of parsedDiff()" [class]="'diff-line ' + line.type">
+                  <span class="line-content">{{ line.content }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Summary Panel -->
           <div class="tab-panel" [class.active]="currentTab() === 'summary'">
             <div class="approval-banner" [ngClass]="getApprovalInfo()?.cls">
@@ -199,7 +205,7 @@
           </div>
 
           <div class="tab-panel" [class.active]="currentTab() === 'report'">
-            <div class="markdown-report">{{ buildMarkdownReport() }}</div>
+            <div class="markdown-report" [innerHTML]="renderedReport()"></div>
             <div class="export-row">
               <button class="export-btn" (click)="copyReport()">📋 Copy Markdown</button>
             </div>

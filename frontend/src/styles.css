@@ -87,14 +87,68 @@ header{
 .divider-row{display:flex;align-items:center;gap:12px;color:var(--text3);font-size:11px;font-family:var(--mono)}
 .divider-line{flex:1;height:1px;background:var(--border)}
 
-.diff-area{
-  flex:1;min-height:260px;font-family:var(--mono);font-size:11.5px;line-height:1.7;
-  background:var(--bg1);border:1px solid var(--border);border-radius:10px;
-  padding:14px 16px;color:var(--text);resize:vertical;outline:none;
-  transition:border-color 0.2s;
+/* ──── RICH DIFF VIEWER ──── */
+.diff-viewer-container {
+  flex: 1;
+  min-height: 300px;
+  max-height: 450px;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.diff-area::placeholder{color:var(--text3)}
-.diff-area:focus{border-color:rgba(0,255,163,0.3);box-shadow:0 0 0 3px rgba(0,255,163,0.05)}
+.diff-empty-state { flex: 1; display: flex; }
+.diff-area{
+  flex:1; font-family:var(--mono);font-size:11.5px;line-height:1.7;
+  background:transparent;border:none;
+  padding:14px 16px;color:var(--text);resize:none;outline:none;
+}
+.rich-diff-view {
+  flex: 1;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  position: relative;
+}
+.diff-line {
+  padding: 0 16px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-left: 3px solid transparent;
+}
+.diff-line.added {
+  background: rgba(0, 255, 163, 0.08);
+  border-left-color: var(--g);
+}
+.diff-line.removed {
+  background: rgba(248, 113, 113, 0.08);
+  border-left-color: var(--red);
+}
+.diff-line.header {
+  background: var(--bg3);
+  color: var(--cyan);
+  font-weight: 600;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.line-content { display: block; }
+.clear-diff-btn {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  padding: 4px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text3);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.clear-diff-btn:hover { color: var(--red); border-color: var(--red); }
 
 .options-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .option-chip{
@@ -285,15 +339,64 @@ header{
   padding:20px;font-size:13px;line-height:1.8;color:var(--text);
 }
 .markdown-report{
-  font-family:var(--mono);font-size:11.5px;line-height:1.75;color:var(--text2);
-  background:var(--bg1);border:1px solid var(--border);border-radius:10px;
-  padding:18px;white-space:pre-wrap;overflow-x:auto;max-height:400px;overflow-y:auto;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  overflow-y: auto;
+  max-height: 600px;
+}
+.markdown-report h1, .markdown-report h2, .markdown-report h3 {
+  color: #fff;
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-family: var(--display);
+}
+.markdown-report h1 { font-size: 24px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.markdown-report h2 { font-size: 20px; }
+.markdown-report h3 { font-size: 18px; color: var(--g); }
+.markdown-report p { margin-bottom: 16px; }
+.markdown-report ul, .markdown-report ol { margin-bottom: 16px; padding-left: 24px; }
+.markdown-report li { margin-bottom: 8px; }
+.markdown-report code {
+  font-family: var(--mono);
+  background: var(--bg3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--cyan);
+}
+.markdown-report pre {
+  background: #000;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-strong);
+}
+.markdown-report pre code {
+  background: none;
+  padding: 0;
+  color: var(--text2);
 }
 .export-row{display:flex;gap:10px;margin-top:16px}
 .export-btn{
-  padding:9px 18px;border-radius:8px;font-family:var(--mono);font-size:11px;
-  background:var(--bg2);border:1px solid var(--border-strong);color:var(--text2);
-  cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg2);
+  border: 1px solid var(--border-strong);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .export-btn:hover{border-color:var(--g);color:var(--g)}
 

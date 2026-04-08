@@ -1,7 +1,9 @@
-import { Component, signal, computed } from '@angular/core';
+import { Component, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { marked } from 'marked';
 
 interface ReviewItem {
   issue: string;
@@ -32,6 +34,9 @@ interface LogEntry {
   templateUrl: './app.component.html',
 })
 export class App {
+  private sanitizer = inject(DomSanitizer);
+  private http = inject(HttpClient);
+
   // Signals for state management
   prUrl = signal('');
   diffInput = signal('');
@@ -60,7 +65,30 @@ export class App {
   refinementCount = signal(0);
   startTime = Date.now();
 
-  constructor(private http: HttpClient) {
+  // Computed rendered report
+  renderedReport = computed<SafeHtml>(() => {
+    const md = this.buildMarkdownReport();
+    if (!md) return '';
+    const html = marked.parse(md) as string;
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  });
+
+  // Computed parsed diff for rich visualization
+  parsedDiff = computed(() => {
+    const raw = this.diffInput();
+    if (!raw) return [];
+    
+    return raw.split('\n').map(line => {
+      let type: 'added' | 'removed' | 'neutral' | 'header' = 'neutral';
+      if (line.startsWith('+') && !line.startsWith('+++')) type = 'added';
+      else if (line.startsWith('-') && !line.startsWith('---')) type = 'removed';
+      else if (line.startsWith('@@') || line.startsWith('diff --git')) type = 'header';
+      
+      return { content: line, type };
+    });
+  });
+
+  constructor() {
     this.appendLog('info', 'GitMind agent initialized. Awaiting input...');
   }
 
@@ -77,8 +105,6 @@ export class App {
     const time = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     
     this.logs.update(prev => [...prev, { time, type, msg }]);
-    
-    // Auto-scroll log box (handled in template or via ViewChild)
   }
 
   setNode(id: string, state: string) {
@@ -99,14 +125,12 @@ export class App {
     this.refinementCount.set(0);
     this.startTime = Date.now();
     
-    // Reset nodes
-    this.setNode('input', '');
+    this.setNode('input', 'active');
     this.setNode('review', '');
     this.setNode('critique', '');
     this.setNode('refine', '');
     this.setNode('output', '');
 
-    this.setNode('input', 'active');
     this.appendLog('info', '▶ Starting analysis via FastAPI + LangGraph...');
 
     try {
@@ -178,6 +202,8 @@ export class App {
     if (reviews) {
       this.analysisData.set(reviews);
       this.setNode('output', 'done');
+      this.setNode('refine', reviews.confidence_score > 80 ? 'done' : '');
+      this.setNode('critique', 'done');
       this.appendLog('success', '✓ Analysis complete. Report generated.');
     }
   }
@@ -211,9 +237,10 @@ export class App {
       .subscribe({
         next: (res) => {
           this.diffInput.set(res.diff);
-          this.appendLog('success', '✓ Diff fetched and loaded into editor.');
+          this.currentTab.set('diff'); // Switch to diff tab automatically
+          this.appendLog('success', '✓ Diff fetched and loaded into viewer.');
         },
-        error: (err) => {
+        error: (err: any) => {
           this.appendLog('error', `✗ Failed to fetch diff: ${err.error?.detail || err.message}`);
         }
       });
