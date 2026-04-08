@@ -1,115 +1,109 @@
-# 🧠 GitMind: Self-Correcting Code Review Agent
+# 🤖 GitMind: Self-Correcting AI Code Reviewer
 
-[![Powered by LangGraph](https://img.shields.io/badge/Powered%20By-LangGraph-blue?style=for-the-badge&logo=python)](https://github.com/langchain-ai/langgraph)
-[![Frontend-Angular](https://img.shields.io/badge/Frontend-Angular%2021-DD0031?style=for-the-badge&logo=angular)](https://angular.io/)
-[![Backend-FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-v0.2-blue.svg)](https://github.com/langchain-ai/langgraph)
+[![Angular 21](https://img.shields.io/badge/Angular-21.0-dd0031.svg)](https://angular.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Latest-009688.svg)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**GitMind** is an advanced AI-powered code review agent designed to automate and elevate the pull request review process. Built on a self-correcting state machine, GitMind doesn't just find bugs—it critiques its own findings to ensure accuracy, tone, and actionability before they ever reach a human developer.
-
----
-
-## ✨ Key Features
-
-- **🔄 Self-Correcting State Machine:** Utilizes LangGraph to implement a Review-Critique-Refinement loop that ensures high-quality feedback.
-- **🔐 Multi-Category Analysis:** Specialized scans for **Security** (SQLi, Secrets, XSS), **Performance** (O(n²) loops, resource leaks), and **Style** (naming, best practices).
-- **🚀 Real-time Progress Streaming:** Built with FastAPI Server-Sent Events (SSE) to show the agent's "thoughts" and progress live in the UI.
-- **🌐 GitHub Integration:** Direct fetching of PR diffs and commit changes via the GitHub API (bypassing CORS restrictions).
-- **🤖 Multi-LLM Support:** Seamlessly switch between **Anthropic Claude 3.5**, **OpenAI GPT-4o**, and **Google Gemini 2.5 Flash**.
+**GitMind** is an advanced, autonomous code review agent built on a cyclic **Self-Critique & Refinement** architecture. Unlike standard linear AI prompts, GitMind uses a state-machine based reasoning loop to analyze GitHub PRs, critique its own findings, and refine its suggestions before presenting them to the developer.
 
 ---
 
-## 🏗 Architecture
+## 📸 Platform Overview
 
-GitMind operates as a directed cyclic graph (DAG) using **LangGraph**:
+### Autonomous Reasoning in Action
+![GitMind Running State](./image.png)
+*Figure 1: Real-time pipeline execution showing the internal monologue and active state machine transitions.*
 
-1.  **Input Parse Node:** Fetches raw diffs from GitHub URLs or processes pasted text.
-2.  **Initial Review Node:** Generates a structured analysis across Security, Performance, and Style.
-3.  **Self-Critique Node:** A specialized AI persona evaluates the review for accuracy and constructive tone.
-4.  **Refinement Loop:** If the critique score is below the threshold, the agent re-runs the review with specific instructions to fix its own errors.
-5.  **Output Node:** Compiles the final findings into a beautiful Markdown report and JSON payload.
+### High-Fidelity Categorized Reports
+![GitMind Complete State](./image1.png)
+*Figure 2: Final analysis showing the "Reviewed by" system, structured diff navigation, and categorized severity cards.*
+
+---
+
+## 🧠 Core Intelligence Engine
+
+GitMind operates using a **Cyclic Directed Acyclic Graph (DAG)** powered by **LangGraph**. The agent doesn't just "read and reply"; it follows a rigorous 4-stage cognitive process:
+
+1.  **📥 Input Parse:** Dynamically fetches and tokenizes raw diffs directly from GitHub.
+2.  **🔍 Initial Review:** Conducts a broad-spectrum analysis (Security, Performance, Style).
+3.  **🧠 Self-Critique:** A separate "critic" node evaluates the review for hallucinations, factual accuracy, and professional tone.
+4.  **🔄 Refinement Loop:** If the critique score is < 80/100, the agent triggers a refinement node to rebuild the review based on the critic's feedback.
+
+---
+
+## 🚀 Key Features
+
+*   **⚡ Multi-Provider Architecture:** 
+    *   **Google Gemini (Research Tier):** Exclusive access to `gemini-2.5-flash`, `gemini-3.0-flash`, and `gemini-3.1-pro`.
+    *   **OpenAI:** `gpt-4o`, `gpt-4o-mini`.
+    *   **Anthropic:** `claude-3-5-sonnet`.
+    *   **DeepSeek & Groq:** Low-latency inference for high-speed reviews.
+*   **💾 State Persistence:** Remembers your preferred models and API keys across sessions using secure `localStorage`.
+*   **🌐 CORS-Free Proxy:** A dedicated FastAPI backend handles GitHub authentication and diff streaming to bypass browser restrictions.
+*   **🎨 Advanced UI:** Zoneless Angular 21 architecture with a high-fidelity GitHub-dark theme and real-time SSE (Server-Sent Events) logging.
 
 ---
 
 ## 🛠 Tech Stack
 
-### Backend
-- **Python 3.10+**
-- **LangGraph & LangChain:** Agent orchestration.
-- **FastAPI:** High-performance async API.
-- **Pydantic V2:** Strict data validation and structured output.
-- **HTTPX:** Async HTTP client for GitHub integration.
-
-### Frontend
-- **Angular 21:** Modern, zoneless architecture.
-- **TypeScript:** Type-safe frontend logic.
-- **Vanilla CSS:** Highly polished, custom-designed UI with glassmorphism and grid textures.
+| Component | Technology | Role |
+| :--- | :--- | :--- |
+| **Frontend** | Angular 21 (Signals, Zoneless) | Reactive UI & State Management |
+| **Backend** | FastAPI (Async) | High-concurrency SSE Streaming |
+| **Orchestration** | LangGraph | State machine & cyclic agent logic |
+| **LLM Framework** | LangChain | Multi-provider abstraction layer |
+| **Visuals** | Marked.js | Professional Markdown rendering |
 
 ---
 
-## 🚀 Getting Started
+## ⚙️ Installation & Setup
 
 ### 1. Prerequisites
 - Python 3.10+
-- Node.js & npm
-- An API Key from Anthropic, OpenAI, or Google AI Studio.
+- Node.js 20+
+- A valid API Key (Gemini, OpenAI, or Anthropic)
 
 ### 2. Backend Setup
 ```bash
-# Navigate to backend
 cd backend
-
-# Install dependencies
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Create .env file
-echo "GOOGLE_API_KEY=your_key_here" > .env
-
-# Start the server
+cp .env.example .env
+# Edit .env with your keys
 python main.py
 ```
 
 ### 3. Frontend Setup
 ```bash
-# Navigate to frontend
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start Angular app
-ng serve
+npm start
 ```
-Visit `http://localhost:4200` to start your first review!
 
 ---
 
-## 📊 Roadmap
+## 🔐 Environment Variables
 
-- [ ] **GitHub Webhook Integration:** Auto-trigger reviews on PR creation.
-- [ ] **Custom Style Guides:** Upload your own `lint` rules or company style guides.
-- [ ] **Multi-File Context:** Analyze full repository context for more complex bug detection.
-- [ ] **IDE Plugin:** JetBrains and VS Code extensions for in-editor reviews.
+Configure your `backend/.env` to enable multiple providers:
 
----
+```env
+# Google Gemini (Primary)
+GOOGLE_API_KEY=your_key_here
 
-## 🤝 Contributing
-
-Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+# Optional Providers
+OPENAI_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
+DEEPSEEK_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
+```
 
 ---
 
-## 📜 License
+## 📄 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
-
-<p align="center">
-  Built with ❤️ by the GitMind Team
-</p>
+*Built with ❤️ for the future of automated software engineering.*

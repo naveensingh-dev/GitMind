@@ -29,9 +29,15 @@ class AgentState(BaseModel):
     style_review: bool = True
     self_critique: bool = True
     
+    # User selection
+    selected_provider: str = "gemini"
+    selected_model: str = "gemini-2.0-flash"
+    api_key: Optional[str] = None
+    
     # Internal state
     reviews: Optional[ReviewReport] = None
     critique: Optional[CritiqueResult] = None
+    monologue: List[str] = Field(default_factory=list)
     refinement_count: int = 0
     final_markdown: str = ""
     status: str = "idle"

@@ -42,6 +42,38 @@
         <input class="url-input" [(ngModel)]="prUrl" placeholder="github.com/owner/repo/pull/42" autocomplete="off"/>
         <button class="fetch-btn" (click)="fetchPrDiff()">Fetch</button>
       </div>
+
+      <!-- Advanced Model & API Key Selection -->
+      <div class="config-row" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+        <div class="select-wrapper" style="position: relative;">
+          <select class="url-input" 
+                  [ngModel]="selectedProvider()" 
+                  (ngModelChange)="selectedProvider.set($event); onProviderChange()" 
+                  style="width: 100%; appearance: none; cursor: pointer;">
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="groq">Groq (Llama/Mistral)</option>
+          </select>
+          <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 10px; opacity: 0.5;">▼</span>
+        </div>
+
+        <div class="select-wrapper" style="position: relative;">
+          <select class="url-input" 
+                  [ngModel]="selectedModel()" 
+                  (ngModelChange)="selectedModel.set($event); onModelChange()" 
+                  style="width: 100%; appearance: none; cursor: pointer;">
+            <option *ngFor="let m of currentModelOptions()" [value]="m.value">{{ m.label }}</option>
+          </select>
+          <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 10px; opacity: 0.5;">▼</span>
+        </div>
+
+        <input class="url-input" type="password" 
+               [ngModel]="userApiKey()" 
+               (ngModelChange)="userApiKey.set($event); saveSettings()" 
+               placeholder="Enter API Key (Optional)" autocomplete="off"/>
+      </div>
       
       <div class="options-row" style="margin-top: 10px;">
         <label class="option-chip">
@@ -113,10 +145,15 @@
       <div class="panel-title">
         Code & Review Report
       </div>
-      <div *ngIf="diffInput()" class="stats-badge">
-        <span class="stat-files">{{ totalStats().files }} files changed</span>
-        <span class="stat-adds">+{{ totalStats().additions }}</span>
-        <span class="stat-dels">-{{ totalStats().deletions }}</span>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span *ngIf="analysisData()" class="header-badge" style="background: rgba(56, 212, 245, 0.08); border-color: rgba(56, 212, 245, 0.2); color: var(--cyan);">
+          Reviewed by: {{ selectedModel() }}
+        </span>
+        <div *ngIf="diffInput()" class="stats-badge">
+          <span class="stat-files">{{ totalStats().files }} files changed</span>
+          <span class="stat-adds">+{{ totalStats().additions }}</span>
+          <span class="stat-dels">-{{ totalStats().deletions }}</span>
+        </div>
       </div>
     </div>
     

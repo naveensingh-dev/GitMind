@@ -1,9 +1,18 @@
+/**
+ * GitMind Frontend - Main Application Component
+ * 
+ * This component manages the state of the PR review process, handles real-time 
+ * SSE updates from the backend, and provides a rich diff visualization.
+ */
+
 import { Component, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { marked } from 'marked';
+
+// --- DATA MODELS ---
 
 interface ReviewItem {
   issue: string;
@@ -57,35 +66,73 @@ export class App {
   private sanitizer = inject(DomSanitizer);
   private http = inject(HttpClient);
 
-  // Signals for state management
+  // --- UI & STATE SIGNALS ---
+  
   prUrl = signal('');
   diffInput = signal('');
   isAnalyzing = signal(false);
-  currentTab = signal('summary');
+  currentTab = signal('diff');
   logs = signal<LogEntry[]>([]);
   analysisData = signal<ReviewReport | null>(null);
   
-  // Pipeline Node States
+  // Model Selection Signals
+  selectedProvider = signal('gemini');
+  selectedModel = signal('gemini-2.5-flash');
+  userApiKey = signal('');
+
+  /**
+   * Model Configuration Map
+   * Maps providers to their specific available models.
+   */
+  modelOptions: Record<string, {label: string, value: string}[]> = {
+    gemini: [
+      { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+      { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
+      { label: 'Gemini 3.0 Flash (Preview)', value: 'gemini-3-flash-preview' },
+      { label: 'Gemini 3.1 Pro (Preview)', value: 'gemini-3.1-pro-preview' },
+      { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' }
+    ],
+    openai: [
+      { label: 'GPT-4o', value: 'gpt-4o' },
+      { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
+      { label: 'GPT-4 Turbo', value: 'gpt-4-turbo' }
+    ],
+    anthropic: [
+      { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20240620' },
+      { label: 'Claude 3.5 Haiku', value: 'claude-3-5-haiku-20241022' },
+      { label: 'Claude 3 Opus', value: 'claude-3-opus-20240229' }
+    ],
+    deepseek: [
+      { label: 'DeepSeek Chat (V3)', value: 'deepseek-chat' },
+      { label: 'DeepSeek Coder', value: 'deepseek-coder' }
+    ],
+    groq: [
+      { label: 'Llama 3.3 70B', value: 'llama-3.3-70b-versatile' },
+      { label: 'Llama 3.1 8B', value: 'llama-3.1-8b-instant' },
+      { label: 'Mixtral 8x7B', value: 'mixtral-8x7b-32768' }
+    ]
+  };
+
+  currentModelOptions = computed(() => this.modelOptions[this.selectedProvider()]);
+
+  // Pipeline Execution States
   nodeStates = signal<Record<string, string>>({
-    input: '',
-    review: '',
-    critique: '',
-    refine: '',
-    output: ''
+    input: '', review: '', critique: '', refine: '', output: ''
   });
 
-  // Options
+  // Analysis Configuration
   opts = {
-    security: true,
-    performance: true,
-    style: true,
-    selfCritique: true
+    security: true, performance: true, style: true, selfCritique: true
   };
 
   refinementCount = signal(0);
   startTime = Date.now();
 
-  // Computed rendered report
+  // --- COMPUTED VALUES ---
+
+  /**
+   * Transforms raw markdown into sanitized SafeHtml for the report view.
+   */
   renderedReport = computed<SafeHtml>(() => {
     const md = this.buildMarkdownReport();
     if (!md) return '';
@@ -93,7 +140,10 @@ export class App {
     return this.sanitizer.bypassSecurityTrustHtml(html);
   });
 
-  // Computed parsed files for rich visualization
+  /**
+   * Parser logic to transform raw Git diff string into a structured 
+   * object model for the rich diff viewer.
+   */
   parsedFiles = computed<DiffFile[]>(() => {
     const raw = this.diffInput();
     if (!raw) return [];
@@ -111,10 +161,7 @@ export class App {
         const pathMatch = line.match(/b\/(.+)$/);
         currentFile = {
           path: pathMatch ? pathMatch[1] : 'unknown',
-          additions: 0,
-          deletions: 0,
-          hunks: [],
-          isOpen: true
+          additions: 0, deletions: 0, hunks: [], isOpen: true
         };
         files.push(currentFile);
         currentHunk = null;
@@ -133,7 +180,7 @@ export class App {
         } else if (line.startsWith('-') && !line.startsWith('---')) {
           currentHunk.lines.push({ content: line, type: 'removed', leftLine: leftLine++ });
           currentFile.deletions++;
-        } else if (!line.startsWith('---') && !line.startsWith('+++') && !line.startsWith('index')) {
+        } else if (!line.startsWith('---') && !line.startsWith('+++')) {
           currentHunk.lines.push({ content: line, type: 'neutral', leftLine: leftLine++, rightLine: rightLine++ });
         }
       }
@@ -152,6 +199,49 @@ export class App {
 
   constructor() {
     this.appendLog('info', 'GitMind agent initialized. Awaiting input...');
+    this.loadSettings();
+  }
+
+  // --- DATA PERSISTENCE ---
+
+  /**
+   * Recovers model preferences and API keys from localStorage.
+   */
+  loadSettings() {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const savedProvider = localStorage.getItem('gitmind_provider');
+      const savedModel = localStorage.getItem('gitmind_model');
+      const savedApiKey = localStorage.getItem('gitmind_apikey');
+
+      if (savedProvider) this.selectedProvider.set(savedProvider);
+      if (savedModel) this.selectedModel.set(savedModel);
+      if (savedApiKey) this.userApiKey.set(savedApiKey);
+    }
+  }
+
+  /**
+   * Persists current preferences to localStorage.
+   */
+  saveSettings() {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem('gitmind_provider', this.selectedProvider());
+      localStorage.setItem('gitmind_model', this.selectedModel());
+      localStorage.setItem('gitmind_apikey', this.userApiKey());
+    }
+  }
+
+  // --- EVENT HANDLERS ---
+
+  onProviderChange() {
+    const options = this.modelOptions[this.selectedProvider()];
+    if (options && options.length > 0) {
+      this.selectedModel.set(options[0].value);
+    }
+    this.saveSettings();
+  }
+
+  onModelChange() {
+    this.saveSettings();
   }
 
   loadExample() {
@@ -165,7 +255,6 @@ export class App {
     const s = elapsed % 60;
     const m = Math.floor(elapsed / 60);
     const time = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    
     this.logs.update(prev => [...prev, { time, type, msg }]);
   }
 
@@ -173,6 +262,10 @@ export class App {
     this.nodeStates.update(prev => ({ ...prev, [id]: state }));
   }
 
+  /**
+   * Core Analysis Trigger
+   * Sends PR data to backend and handles the real-time SSE stream.
+   */
   async startAnalysis() {
     const diff = this.diffInput().trim();
     const url = this.prUrl().trim();
@@ -182,18 +275,17 @@ export class App {
       return;
     }
 
+    this.saveSettings();
     this.isAnalyzing.set(true);
     this.analysisData.set(null);
     this.refinementCount.set(0);
     this.startTime = Date.now();
     
+    // Reset pipeline UI
+    ['input', 'review', 'critique', 'refine', 'output'].forEach(n => this.setNode(n, ''));
     this.setNode('input', 'active');
-    this.setNode('review', '');
-    this.setNode('critique', '');
-    this.setNode('refine', '');
-    this.setNode('output', '');
 
-    this.appendLog('info', '▶ Starting analysis via FastAPI + LangGraph...');
+    this.appendLog('info', `▶ Starting analysis using ${this.selectedModel().toUpperCase()}...`);
 
     try {
       const response = await fetch('http://localhost:8000/analyze', {
@@ -205,7 +297,10 @@ export class App {
           security_scan: this.opts.security,
           perf_analysis: this.opts.performance,
           style_review: this.opts.style,
-          self_critique: this.opts.selfCritique
+          self_critique: this.opts.selfCritique,
+          selected_provider: this.selectedProvider(),
+          selected_model: this.selectedModel(),
+          api_key: this.userApiKey() || null
         })
       });
 
@@ -213,6 +308,7 @@ export class App {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
+      // Stream processor loop
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -234,8 +330,11 @@ export class App {
     }
   }
 
+  /**
+   * Processes individual state updates from the LangGraph backend.
+   */
   handleAgentEvent(data: any) {
-    const { node, status, reviews, critique, refinement_count, message } = data;
+    const { node, status, reviews, critique, refinement_count, monologue, message } = data;
 
     if (node === 'error') {
       this.appendLog('error', `✗ Backend error: ${message}`);
@@ -243,24 +342,18 @@ export class App {
       return;
     }
 
-    if (node === 'input') {
-      this.setNode('input', 'active');
-      this.appendLog('info', '▶ Input node active: fetching/parsing diff...');
-    } else if (node === 'review') {
-      this.setNode('input', 'done');
-      this.setNode('review', 'active');
-      this.appendLog('info', '▶ Review node active: running analysis...');
-    } else if (node === 'critique') {
-      this.setNode('review', 'done');
-      this.setNode('critique', 'active');
-      this.appendLog('info', '▶ Self-critique node active: evaluating quality...');
-    } else if (node === 'refine') {
-      this.setNode('critique', 'done');
-      this.setNode('refine', 'loop');
-      this.refinementCount.set(refinement_count);
-      this.appendLog('warn', `⚠ Critique insufficient. Triggering refinement loop (Count: ${refinement_count})...`);
+    // Process "internal monologue" thoughts from the AI
+    if (monologue && monologue.length > 0) {
+      monologue.forEach((msg: string) => this.appendLog('accent', msg));
     }
 
+    // Sync node animations with backend state
+    if (node === 'input') this.setNode('input', 'active');
+    else if (node === 'review') { this.setNode('input', 'done'); this.setNode('review', 'active'); }
+    else if (node === 'critique') { this.setNode('review', 'done'); this.setNode('critique', 'active'); }
+    else if (node === 'refine') { this.setNode('critique', 'done'); this.setNode('refine', 'loop'); this.refinementCount.set(refinement_count); }
+
+    // Final result handling
     if (reviews) {
       this.analysisData.set(reviews);
       this.setNode('output', 'done');
@@ -283,9 +376,12 @@ export class App {
       needs_changes: { icon: '⚠️', label: 'Needs Changes', sub: 'Address issues before merging', cls: 'needs_changes' },
       rejected: { icon: '❌', label: 'Rejected', sub: 'Significant issues require attention', cls: 'rejected' }
     };
-    return statusMap[data.approval_status] || statusMap['needs_changes'];
+    return (statusMap as any)[data.approval_status] || statusMap['needs_changes'];
   }
 
+  /**
+   * API call to fetch raw diff text via backend proxy.
+   */
   fetchPrDiff() {
     const url = this.prUrl().trim();
     if (!url) {
@@ -299,7 +395,7 @@ export class App {
       .subscribe({
         next: (res) => {
           this.diffInput.set(res.diff);
-          this.currentTab.set('diff'); // Switch to diff tab automatically
+          this.currentTab.set('diff');
           this.appendLog('success', '✓ Diff fetched and loaded into viewer.');
         },
         error: (err: any) => {
@@ -308,6 +404,9 @@ export class App {
       });
   }
 
+  /**
+   * Generates a clean Markdown representation of the review results.
+   */
   buildMarkdownReport() {
     const data = this.analysisData();
     if (!data) return '';
@@ -320,32 +419,18 @@ export class App {
     
     md += `## Executive Summary\n\n${data.summary || 'No summary provided.'}\n\n`;
     
-    if (data.security && data.security.length > 0) {
-      md += `## 🔐 Security\n\n`;
-      data.security.forEach(i => {
-        md += `### [${i.severity.toUpperCase()}] ${i.issue}\n`;
-        if (i.line) md += `**Code:** \`${i.line}\`  \n`;
-        md += `**Fix:** ${i.fix}\n\n`;
-      });
-    }
-    
-    if (data.performance && data.performance.length > 0) {
-      md += `## ⚡ Performance\n\n`;
-      data.performance.forEach(i => {
-        md += `### [${i.severity.toUpperCase()}] ${i.issue}\n`;
-        if (i.line) md += `**Code:** \`${i.line}\`  \n`;
-        md += `**Fix:** ${i.fix}\n\n`;
-      });
-    }
-    
-    if (data.style && data.style.length > 0) {
-      md += `## 🎨 Style\n\n`;
-      data.style.forEach(i => {
-        md += `### [${i.severity.toUpperCase()}] ${i.issue}\n`;
-        if (i.line) md += `**Code:** \`${i.line}\`  \n`;
-        md += `**Fix:** ${i.fix}\n\n`;
-      });
-    }
+    // Add findings by category
+    ['security', 'performance', 'style'].forEach(cat => {
+      const items = (data as any)[cat];
+      if (items && items.length > 0) {
+        md += `## ${cat === 'security' ? '🔐 Security' : cat === 'performance' ? '⚡ Performance' : '🎨 Style'}\n\n`;
+        items.forEach((i: any) => {
+          md += `### [${i.severity.toUpperCase()}] ${i.issue}\n`;
+          if (i.line) md += `**Code:** \`${i.line}\`  \n`;
+          md += `**Fix:** ${i.fix}\n\n`;
+        });
+      }
+    });
     
     md += `---\n*Report generated by GitMind — LangGraph Self-Correcting Code Review Agent*`;
     return md;
@@ -361,6 +446,7 @@ export class App {
   }
 }
 
+// Example data for demonstration
 const EXAMPLE_DIFF = `diff --git a/src/auth/userController.js b/src/auth/userController.js
 index 1234567..890abcde 100644
 --- a/src/auth/userController.js

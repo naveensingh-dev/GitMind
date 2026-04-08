@@ -54,10 +54,11 @@ async def fetch_github_diff(url: str):
 async def analyze_pr(request: Request):
     try:
         data = await request.json()
+        print(f"DEBUG: Incoming Request Data -> {data}")
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     
-    # Initialize state
+    # Initialize state with user selections directly from the payload
     initial_state = {
         "diff": data.get("diff", ""),
         "github_url": data.get("github_url"),
@@ -65,6 +66,9 @@ async def analyze_pr(request: Request):
         "perf_analysis": data.get("perf_analysis", True),
         "style_review": data.get("style_review", True),
         "self_critique": data.get("self_critique", True),
+        "selected_provider": data.get("selected_provider"),
+        "selected_model": data.get("selected_model"),
+        "api_key": data.get("api_key"),
         "refinement_count": 0,
         "status": "started"
     }
@@ -82,6 +86,7 @@ async def analyze_pr(request: Request):
                     "node": node_name,
                     "status": state_update.get("status"),
                     "refinement_count": state_update.get("refinement_count", 0),
+                    "monologue": state_update.get("monologue", []),
                     "reviews": state_update.get("reviews").model_dump() if state_update.get("reviews") else None,
                     "critique": state_update.get("critique").model_dump() if state_update.get("critique") else None
                 }
