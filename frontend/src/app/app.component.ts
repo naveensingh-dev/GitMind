@@ -27,6 +27,26 @@ interface LogEntry {
   msg: string;
 }
 
+interface DiffLine {
+  content: string;
+  type: 'added' | 'removed' | 'neutral';
+  leftLine?: number;
+  rightLine?: number;
+}
+
+interface DiffHunk {
+  header: string;
+  lines: DiffLine[];
+}
+
+interface DiffFile {
+  path: string;
+  additions: number;
+  deletions: number;
+  hunks: DiffHunk[];
+  isOpen: boolean;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -73,19 +93,61 @@ export class App {
     return this.sanitizer.bypassSecurityTrustHtml(html);
   });
 
-  // Computed parsed diff for rich visualization
-  parsedDiff = computed(() => {
+  // Computed parsed files for rich visualization
+  parsedFiles = computed<DiffFile[]>(() => {
     const raw = this.diffInput();
     if (!raw) return [];
     
-    return raw.split('\n').map(line => {
-      let type: 'added' | 'removed' | 'neutral' | 'header' = 'neutral';
-      if (line.startsWith('+') && !line.startsWith('+++')) type = 'added';
-      else if (line.startsWith('-') && !line.startsWith('---')) type = 'removed';
-      else if (line.startsWith('@@') || line.startsWith('diff --git')) type = 'header';
-      
-      return { content: line, type };
-    });
+    const files: DiffFile[] = [];
+    let currentFile: DiffFile | null = null;
+    let currentHunk: DiffHunk | null = null;
+    
+    const lines = raw.split('\n');
+    let leftLine = 0;
+    let rightLine = 0;
+
+    for (const line of lines) {
+      if (line.startsWith('diff --git')) {
+        const pathMatch = line.match(/b\/(.+)$/);
+        currentFile = {
+          path: pathMatch ? pathMatch[1] : 'unknown',
+          additions: 0,
+          deletions: 0,
+          hunks: [],
+          isOpen: true
+        };
+        files.push(currentFile);
+        currentHunk = null;
+      } else if (line.startsWith('@@') && currentFile) {
+        const rangeMatch = line.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/);
+        if (rangeMatch) {
+          leftLine = parseInt(rangeMatch[1]);
+          rightLine = parseInt(rangeMatch[2]);
+        }
+        currentHunk = { header: line, lines: [] };
+        currentFile.hunks.push(currentHunk);
+      } else if (currentHunk && currentFile) {
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          currentHunk.lines.push({ content: line, type: 'added', rightLine: rightLine++ });
+          currentFile.additions++;
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+          currentHunk.lines.push({ content: line, type: 'removed', leftLine: leftLine++ });
+          currentFile.deletions++;
+        } else if (!line.startsWith('---') && !line.startsWith('+++') && !line.startsWith('index')) {
+          currentHunk.lines.push({ content: line, type: 'neutral', leftLine: leftLine++, rightLine: rightLine++ });
+        }
+      }
+    }
+    return files;
+  });
+
+  totalStats = computed(() => {
+    const files = this.parsedFiles();
+    return {
+      files: files.length,
+      additions: files.reduce((acc, f) => acc + f.additions, 0),
+      deletions: files.reduce((acc, f) => acc + f.deletions, 0)
+    };
   });
 
   constructor() {
@@ -293,9 +355,15 @@ export class App {
     navigator.clipboard.writeText(this.buildMarkdownReport());
     this.appendLog('success', '✓ Report copied to clipboard');
   }
+
+  toggleFile(file: DiffFile) {
+    file.isOpen = !file.isOpen;
+  }
 }
 
-const EXAMPLE_DIFF = `--- a/src/auth/userController.js
+const EXAMPLE_DIFF = `diff --git a/src/auth/userController.js b/src/auth/userController.js
+index 1234567..890abcde 100644
+--- a/src/auth/userController.js
 +++ b/src/auth/userController.js
 @@ -8,12 +8,19 @@ const db = require('../db');
  
@@ -314,5 +382,18 @@ const EXAMPLE_DIFF = `--- a/src/auth/userController.js
 +  const users = await db.query('SELECT * FROM users');
 +  console.log(users); // debug
 +  res.json(users);
++}
++diff --git a/src/utils/cache.js b/src/utils/cache.js
+--- a/src/utils/cache.js
++++ b/src/utils/cache.js
+@@ -3,7 +3,18 @@ const redis = require('redis');
+ 
+ function getCache(key) {
+-  return redis.get(key);
++  var result = null;
++  for (var i = 0; i < 1000; i++) {
++    result = redis.get(key);
++  }
++  return result;
 +}
 +`;
