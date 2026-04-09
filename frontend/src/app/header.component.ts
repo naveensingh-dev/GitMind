@@ -1,8 +1,10 @@
 import { Component, input } from '@angular/core';
+import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-header',
   standalone: true,
+  imports: [CommonModule],
   template: `
     <header>
       <a class="logo" href="#">
@@ -20,8 +22,10 @@ import { Component, input } from '@angular/core';
         <span class="logo-text">Git<span>Mind</span></span>
       </a>
       <div class="header-right">
-        <div class="loop-indicator" [class.visible]="refinementCount() > 0">
-          <span>↻</span><span>Refinement loop</span><span class="loop-count">×{{ refinementCount() }}</span>
+        <div class="loop-indicator" *ngIf="refinementCount() > 0">
+          <span class="loop-icon">↻</span>
+          <span class="loop-text">Refinement loop</span>
+          <span class="loop-count">×{{ refinementCount() }}</span>
         </div>
         <span class="header-badge">LangGraph · v2.2</span>
         <div class="status-dot"><div class="dot"></div><span>Agent online</span></div>
@@ -30,6 +34,42 @@ import { Component, input } from '@angular/core';
   `,
   styles: [`
     :host { display: block; }
+    .loop-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      background: rgba(251, 146, 60, 0.08);
+      border: 1px solid rgba(251, 146, 60, 0.2);
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--orange);
+      animation: fadeIn 0.3s ease-out;
+    }
+    .loop-icon {
+      font-size: 14px;
+      animation: spin 2s linear infinite;
+    }
+    .loop-text {
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .loop-count {
+      background: var(--orange);
+      color: #000;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   `]
 })
 export class HeaderComponent {

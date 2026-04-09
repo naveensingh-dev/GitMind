@@ -13,6 +13,8 @@ import { FileTreeComponent } from './file-tree.component';
 interface ReviewItem {
   issue: string;
   severity: 'high' | 'medium' | 'low';
+  file_path?: string;
+  line_number?: number;
   line?: string;
   fix: string;
 }
@@ -77,6 +79,16 @@ export class App implements OnInit {
   selectedProvider = signal('gemini');
   selectedModel = signal('gemini-1.5-flash');
   userApiKey = signal('');
+  
+  // Use a simple property for token input to ensure ngModel compatibility
+  githubTokenInput = '';
+  githubToken = signal('');
+
+  onTokenInputChange(val: string) {
+    this.githubTokenInput = val;
+    this.githubToken.set(val);
+    this.saveSettings();
+  }
 
   /**
    * Model Configuration Map
@@ -231,10 +243,15 @@ export class App implements OnInit {
       const savedProvider = localStorage.getItem('gitmind_provider');
       const savedModel = localStorage.getItem('gitmind_model');
       const savedApiKey = localStorage.getItem('gitmind_apikey');
+      const savedGithubToken = localStorage.getItem('gitmind_github_token');
 
       if (savedProvider) this.selectedProvider.set(savedProvider);
       if (savedModel) this.selectedModel.set(savedModel);
       if (savedApiKey) this.userApiKey.set(savedApiKey);
+      if (savedGithubToken) {
+        this.githubToken.set(savedGithubToken);
+        this.githubTokenInput = savedGithubToken;
+      }
     }
   }
 
@@ -243,6 +260,7 @@ export class App implements OnInit {
       localStorage.setItem('gitmind_provider', this.selectedProvider());
       localStorage.setItem('gitmind_model', this.selectedModel());
       localStorage.setItem('gitmind_apikey', this.userApiKey());
+      localStorage.setItem('gitmind_github_token', this.githubToken());
     }
   }
 
@@ -303,6 +321,7 @@ export class App implements OnInit {
     this.apiService.analyze({
       diff: diff || null,
       github_url: url || null,
+      github_token: this.githubToken() || null,
       security_scan: this.opts.security,
       perf_analysis: this.opts.performance,
       style_review: this.opts.style,
@@ -494,6 +513,33 @@ export class App implements OnInit {
     this.appendLog('success', '✓ Report copied to clipboard');
   }
 
+  pushToGithub(item: ReviewItem) {
+    const url = this.prUrl().trim();
+    // Prioritize direct property if signal is being flaky
+    const token = (this.githubToken() || this.githubTokenInput || '').trim();
+
+    if (!url) {
+      this.appendLog('error', 'PR URL is required to push comments.');
+      return;
+    }
+
+    if (!token) {
+      this.appendLog('error', 'GitHub PAT is required to push comments. Enter it in Agent Controls.');
+      return;
+    }
+
+    this.appendLog('info', `▶ Pushing suggestion to GitHub for: ${item.issue}...`);
+    
+    this.apiService.pushComment(url, item, token).subscribe({
+      next: (res) => {
+        this.appendLog('success', `✓ Suggestion posted successfully! View here: ${res.comment_url}`);
+      },
+      error: (err) => {
+        this.appendLog('error', `✗ Failed to post suggestion: ${err.error?.detail || err.message}`);
+      }
+    });
+  }
+
   toggleFile(file: DiffFile) {
     file.isOpen = !file.isOpen;
   }
@@ -578,4 +624,3 @@ index 1234567..890abcde 100644
 return result;
 }
 `;
-

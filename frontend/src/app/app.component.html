@@ -12,9 +12,9 @@
 </div>
 
 <!-- APP -->
-<div class="app">
+<div class="app" [class.no-sidebar]="!diffInput()">
   <!-- SIDEBAR (File Tree) -->
-  <div class="sidebar">
+  <div class="sidebar" *ngIf="diffInput()">
     <div class="sidebar-header">
       <div class="panel-title">
         <svg class="panel-title-icon" viewBox="0 0 18 18" fill="none">
@@ -79,7 +79,12 @@
         <input class="url-input" type="password" 
                [ngModel]="userApiKey()" 
                (ngModelChange)="userApiKey.set($event); saveSettings()" 
-               placeholder="Enter API Key (Optional)" autocomplete="off"/>
+               placeholder="LLM API Key (Optional)" autocomplete="off"/>
+               
+        <input class="url-input" type="password" 
+               [(ngModel)]="githubTokenInput" 
+               (ngModelChange)="onTokenInputChange($event)"
+               placeholder="GitHub PAT (Enter and press enter or click outside)" autocomplete="off"/>
       </div>
       
       <div class="options-row">
@@ -278,11 +283,12 @@
               <div class="review-card-header">
                 <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
                 <span class="card-issue">{{ item.issue }}</span>
+                <button class="push-github-btn" (click)="pushToGithub(item)">Push Suggestion ↗</button>
               </div>
               <div class="review-card-body">
                 <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
-                <div class="fix-label">💡 Suggested fix:</div>
-                <div class="fix-text">{{ item.fix }}</div>
+                <div class="fix-label">💡 Suggested fix (Editable):</div>
+                <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
               </div>
             </div>
           </div>
@@ -293,11 +299,12 @@
               <div class="review-card-header">
                 <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
                 <span class="card-issue">{{ item.issue }}</span>
+                <button class="push-github-btn" (click)="pushToGithub(item)">Push Suggestion ↗</button>
               </div>
               <div class="review-card-body">
                 <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
-                <div class="fix-label">💡 Suggested fix:</div>
-                <div class="fix-text">{{ item.fix }}</div>
+                <div class="fix-label">💡 Suggested fix (Editable):</div>
+                <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
               </div>
             </div>
           </div>
@@ -308,11 +315,12 @@
               <div class="review-card-header">
                 <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
                 <span class="card-issue">{{ item.issue }}</span>
+                <button class="push-github-btn" (click)="pushToGithub(item)">Push Suggestion ↗</button>
               </div>
               <div class="review-card-body">
                 <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
-                <div class="fix-label">💡 Suggested fix:</div>
-                <div class="fix-text">{{ item.fix }}</div>
+                <div class="fix-label">💡 Suggested fix (Editable):</div>
+                <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
               </div>
             </div>
           </div>

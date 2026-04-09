@@ -4,6 +4,8 @@ from typing import List, Optional, Literal
 class ReviewItem(BaseModel):
     issue: str = Field(description="Brief description of the issue found")
     severity: Literal["high", "medium", "low"] = Field(description="The impact of the issue")
+    file_path: Optional[str] = Field(description="The relative path of the file containing the issue")
+    line_number: Optional[int] = Field(description="The line number in the diff (new file line number) where the issue exists")
     line: Optional[str] = Field(description="The relevant line of code from the diff")
     fix: str = Field(description="Actionable suggestion to fix the issue")
 

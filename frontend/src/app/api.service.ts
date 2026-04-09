@@ -27,6 +27,14 @@ export class ApiService {
     return this.createSseObservable(`${this.baseUrl}/feedback`, { thread_id: threadId, feedback });
   }
 
+  pushComment(githubUrl: string, item: any, token: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/push-to-github`, {
+      github_url: githubUrl,
+      item: item,
+      github_token: token
+    });
+  }
+
   private createSseObservable(url: string, payload: any): Observable<string> {
     return new Observable(observer => {
       fetch(url, {

@@ -6,6 +6,11 @@ Guidelines:
 2. Performance: Look for O(n^2) loops, unnecessary re-renders, slow database queries, or inefficient resource usage.
 3. Style: Look for naming conventions, code duplication, and alignment with modern best practices.
 
+IMPORTANT: For each issue found, you MUST identify:
+- `file_path`: The relative path of the file (e.g., 'src/app/auth.service.ts').
+- `line_number`: The line number in the NEW version of the file where the issue occurs.
+- `line`: The exact line of code from the diff.
+
 Return your findings in the requested structured JSON format. Be specific, actionable, and reference actual code snippets from the diff."""
 
 CRITIQUE_SYSTEM_PROMPT = """You are a Code Review Critic. Your job is to evaluate the quality of an initial code review.
