@@ -63,6 +63,8 @@ export class App implements OnInit {
   currentTab = signal('diff');
   logs = signal<LogEntry[]>([]);
   analysisData = signal<ReviewReport | null>(null);
+  critiqueData = signal<{ score: number, feedback?: string, accurate?: boolean } | null>(null);
+  errorMessage = signal<string | null>(null);
   
   // Model Selection Signals
   selectedProvider = signal('gemini');
@@ -86,19 +88,16 @@ export class App implements OnInit {
       
       // Gemini 2.0 Series
       { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
-      { label: 'Gemini 2.0 Flash-Lite (Preview)', value: 'gemini-2.0-flash-lite-preview-02-05' },
-      { label: 'Gemini 2.0 Pro (Exp)', value: 'gemini-2.0-pro-exp-02-05' },
-      { label: 'Gemini 2.0 Flash-Thinking (Exp)', value: 'gemini-2.0-flash-thinking-exp-01-21' },
+      { label: 'Gemini 2.0 Flash-Lite', value: 'gemini-2.0-flash-lite' },
+      { label: 'Gemini 2.0 Flash (Latest)', value: 'gemini-2.0-flash-001' },
       
       // Gemini 1.5 Series
       { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
-      { label: 'Gemini 1.5 Pro (Latest)', value: 'gemini-1.5-pro-latest' },
       { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
-      { label: 'Gemini 1.5 Flash (Latest)', value: 'gemini-1.5-flash-latest' },
-      { label: 'Gemini 1.5 Flash-8B', value: 'gemini-1.5-flash-8b' },
+      { label: 'Gemini 1.5 Flash (Latest)', value: 'gemini-flash-latest' },
       
       // Legacy / Stable
-      { label: 'Gemini 1.0 Pro', value: 'gemini-1.0-pro' }
+      { label: 'Gemini 1.0 Pro', value: 'gemini-pro-latest' }
     ],
     openai: [
       { label: 'o3-mini', value: 'o3-mini' },
@@ -328,7 +327,12 @@ export class App implements OnInit {
     const { node, status, reviews, critique, refinement_count, monologue, message } = data;
 
     if (node === 'error' || status === 'failed') {
-      this.appendLog('error', `✗ Backend error: ${message || 'Process failed'}`);
+      const isQuota = message?.includes('RESOURCE_EXHAUSTED') || message?.includes('429');
+      if (isQuota) {
+        this.errorMessage.set('NEURAL LINK OVERLOAD: API quota exhausted. Please switch to a different model or wait a moment before retrying.');
+      } else {
+        this.appendLog('error', `✗ Backend error: ${message || 'Process failed'}`);
+      }
       this.isAnalyzing.set(false);
       return;
     }
@@ -339,7 +343,11 @@ export class App implements OnInit {
 
     if (node === 'input') this.setNode('input', 'active');
     else if (node === 'review') { this.setNode('input', 'done'); this.setNode('review', 'active'); }
-    else if (node === 'critique') { this.setNode('review', 'done'); this.setNode('critique', 'active'); }
+    else if (node === 'critique') { 
+      this.setNode('review', 'done'); 
+      this.setNode('critique', 'active'); 
+      if (critique) this.critiqueData.set(critique);
+    }
     else if (node === 'refine') { this.setNode('critique', 'done'); this.setNode('refine', 'loop'); this.refinementCount.set(refinement_count); }
 
     if (reviews) {
@@ -349,6 +357,10 @@ export class App implements OnInit {
       this.setNode('critique', 'done');
       this.appendLog('success', '✓ Analysis complete. Report generated.');
     }
+  }
+
+  clearError() {
+    this.errorMessage.set(null);
   }
 
   switchTab(name: string) {
@@ -423,6 +435,35 @@ export class App implements OnInit {
 
   toggleFile(file: DiffFile) {
     file.isOpen = !file.isOpen;
+  }
+
+  /**
+   * Simple Regex-based Syntax Highlighting for the Diff Viewer
+   */
+  highlightCode(code: string): SafeHtml {
+    if (!code) return '';
+    
+    // Escape HTML first
+    let html = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // 1. Comments
+    html = html.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, '<span class="hl-comment">$1</span>');
+    
+    // 2. Strings
+    html = html.replace(/("(?:\\"|[^"])*"|'(?:\\'|[^'])*'|`(?:\\`|[^`])*`)/g, '<span class="hl-string">$1</span>');
+    
+    // 3. Keywords
+    const keywords = ['const', 'let', 'var', 'function', 'async', 'await', 'return', 'if', 'else', 'for', 'while', 'import', 'from', 'export', 'class', 'interface', 'try', 'catch', 'finally'];
+    const kwRegex = new RegExp(`\\b(${keywords.join('|')})\\b`, 'g');
+    html = html.replace(kwRegex, '<span class="hl-keyword">$1</span>');
+
+    // 4. Numbers
+    html = html.replace(/\b(\d+)\b/g, '<span class="hl-number">$1</span>');
+
+    return this.sanitizer.bypassSecurityTrustHtml(html);
   }
 }
 

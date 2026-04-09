@@ -5,6 +5,7 @@ langchain
 langchain-anthropic
 langchain-openai
 langchain-google-genai
+google-generativeai
 pydantic
 python-dotenv
 httpx

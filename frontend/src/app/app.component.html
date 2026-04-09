@@ -1,6 +1,16 @@
 <!-- HEADER -->
 <app-header [refinementCount]="refinementCount()"></app-header>
 
+<!-- ERROR OVERLAY -->
+<div class="error-overlay" *ngIf="errorMessage()">
+  <div class="error-modal">
+    <div class="error-icon">⚠️</div>
+    <div class="error-title">SYSTEM ALERT</div>
+    <div class="error-body">{{ errorMessage() }}</div>
+    <button class="error-close" (click)="clearError()">ACKNOWLEDGE</button>
+  </div>
+</div>
+
 <!-- APP -->
 <div class="app">
   <!-- LEFT PANEL -->
@@ -167,7 +177,7 @@
                         <span class="num">{{ line.leftLine || '' }}</span>
                         <span class="num">{{ line.rightLine || '' }}</span>
                       </div>
-                      <div class="line-content">{{ line.content }}</div>
+                      <div class="line-content" [innerHTML]="highlightCode(line.content)"></div>
                     </div>
                   </div>
                 </div>
@@ -202,6 +212,23 @@
                 </div>
                 <div class="conf-bar-track">
                   <div class="conf-bar-fill" [style.width.%]="analysisData()?.confidence_score"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Critic Corner -->
+            <div class="summary-box critique-box" *ngIf="critiqueData()" style="margin-top: 20px; border-color: rgba(167, 139, 250, 0.2);">
+              <div class="group-title" style="margin-bottom: 16px; color: var(--purple);">🧠 Critic's Corner</div>
+              <div style="display: flex; align-items: flex-start; gap: 20px;">
+                <div class="critique-score-circle">
+                  <span class="score-val">{{ critiqueData()?.score }}</span>
+                  <span class="score-lbl">Quality</span>
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-size: 12px; color: var(--text3); font-family: var(--mono); margin-bottom: 8px;">SELF-CORRECTION FEEDBACK:</div>
+                  <p style="margin: 0; font-size: 13px; line-height: 1.6; color: var(--text2); font-style: italic;">
+                    "{{ critiqueData()?.feedback || 'The review was deemed accurate and requires no further refinement.' }}"
+                  </p>
                 </div>
               </div>
             </div>

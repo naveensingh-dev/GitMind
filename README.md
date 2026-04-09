@@ -1,7 +1,7 @@
 # 🤖 GitMind: Self-Correcting AI Code Reviewer
 
 [![LangGraph](https://img.shields.io/badge/LangGraph-v0.2-blue.svg)](https://github.com/langchain-ai/langgraph)
-[![Angular 21](https://img.shields.io/badge/Angular-21.0-dd0031.svg)](https://angular.dev/)
+[![Angular 20](https://img.shields.io/badge/Angular-20.1-dd0031.svg)](https://angular.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Latest-009688.svg)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -25,6 +25,15 @@
 
 GitMind operates using a **Cyclic Directed Acyclic Graph (DAG)** powered by **LangGraph**. The agent doesn't just "read and reply"; it follows a rigorous 4-stage cognitive process:
 
+```mermaid
+graph TD
+    A[📥 Input Parse] --> B[🔍 Initial Review]
+    B --> C[🧠 Self-Critique]
+    C -->|Score < 80| D[🔄 Refinement Loop]
+    D --> C
+    C -->|Score >= 80| E[🏁 Final Report]
+```
+
 1.  **📥 Input Parse:** Dynamically fetches and tokenizes raw diffs directly from GitHub.
 2.  **🔍 Initial Review:** Conducts a broad-spectrum analysis (Security, Performance, Style).
 3.  **🧠 Self-Critique:** A separate "critic" node evaluates the review for hallucinations, factual accuracy, and professional tone.
@@ -35,13 +44,14 @@ GitMind operates using a **Cyclic Directed Acyclic Graph (DAG)** powered by **La
 ## 🚀 Key Features
 
 *   **⚡ Multi-Provider Architecture:** 
-    *   **Google Gemini (Research Tier):** Exclusive access to `gemini-2.5-flash`, `gemini-3.0-flash`, and `gemini-3.1-pro`.
-    *   **OpenAI:** `gpt-4o`, `gpt-4o-mini`.
+    *   **Google Gemini:** `gemini-2.0-flash`, `gemini-1.5-pro`, etc.
+    *   **OpenAI:** `gpt-4o`, `gpt-4o-mini`, `o3-mini`.
     *   **Anthropic:** `claude-3-5-sonnet`.
     *   **DeepSeek & Groq:** Low-latency inference for high-speed reviews.
 *   **💾 State Persistence:** Remembers your preferred models and API keys across sessions using secure `localStorage`.
 *   **🌐 CORS-Free Proxy:** A dedicated FastAPI backend handles GitHub authentication and diff streaming to bypass browser restrictions.
-*   **🎨 Advanced UI:** Zoneless Angular 21 architecture with a high-fidelity GitHub-dark theme and real-time SSE (Server-Sent Events) logging.
+*   **🎨 Advanced UI:** Zoneless Angular architecture with a high-fidelity GitHub-dark theme, real-time SSE (Server-Sent Events) logging, and syntax-highlighted diffs.
+*   **🧠 Critic's Corner:** Transparent view into the agent's self-correction process and quality scoring.
 
 ---
 
@@ -49,11 +59,30 @@ GitMind operates using a **Cyclic Directed Acyclic Graph (DAG)** powered by **La
 
 | Component | Technology | Role |
 | :--- | :--- | :--- |
-| **Frontend** | Angular 21 (Signals, Zoneless) | Reactive UI & State Management |
+| **Frontend** | Angular 20 (Signals, Zoneless) | Reactive UI & State Management |
 | **Backend** | FastAPI (Async) | High-concurrency SSE Streaming |
 | **Orchestration** | LangGraph | State machine & cyclic agent logic |
 | **LLM Framework** | LangChain | Multi-provider abstraction layer |
 | **Visuals** | Marked.js | Professional Markdown rendering |
+
+---
+
+## 📂 Project Structure
+
+```text
+GitMind/
+├── backend/                # FastAPI + LangGraph Logic
+│   ├── agent.py            # LangGraph workflow definition
+│   ├── main.py             # FastAPI entry point & SSE streaming
+│   ├── prompts.py          # System prompts for Reviewer/Critic/Refiner
+│   ├── schemas.py          # Pydantic models for type-safe state
+│   └── requirements.txt    # Python dependencies
+├── frontend/               # Angular 20 Application
+│   ├── src/app/            # Component & Service logic
+│   ├── src/styles.css      # Custom Cyberpunk/GitHub-Dark theme
+│   └── package.json        # Frontend dependencies
+└── README.md               # Documentation
+```
 
 ---
 
