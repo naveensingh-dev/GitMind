@@ -22,6 +22,26 @@ from prompts import REVIEWER_SYSTEM_PROMPT, CRITIQUE_SYSTEM_PROMPT, REFINEMENT_S
 # Load environment variables from .env
 load_dotenv()
 
+# --- UTILS ---
+
+async def fetch_github_diff_text(url: str) -> str:
+    """Helper to fetch raw diff text from GitHub."""
+    clean_url = url.split("?")[0].rstrip("/")
+    diff_url = clean_url if clean_url.endswith(".diff") else clean_url + ".diff"
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            response = await client.get(diff_url, follow_redirects=True)
+            if response.status_code == 200:
+                return response.text
+            # Fallback to .patch
+            patch_url = clean_url + ".patch"
+            response = await client.get(patch_url, follow_redirects=True)
+            if response.status_code == 200:
+                return response.text
+        except Exception as e:
+            print(f"Error fetching diff: {e}")
+    return ""
+
 # --- LLM FACTORY METHODS ---
 
 def get_model_instance(provider: str, model_name: str, api_key: str):
@@ -51,16 +71,16 @@ def get_model_instance(provider: str, model_name: str, api_key: str):
         return ChatOpenAI(model=model_name, temperature=0, api_key=api_key, base_url="https://api.groq.com/openai/v1")
     return None
 
-async def invoke_llm(structured_class, state: Dict, messages: List):
+async def invoke_llm(structured_class, state: AgentState, messages: List):
     """
     Business Logic Wrapper for LLM calls.
     Handles credential retrieval, sanitization, and execution.
     """
-    provider = state.get("selected_provider") or "gemini"
-    model_name = state.get("selected_model") or "gemini-2.5-flash"
+    provider = state.selected_provider or "gemini"
+    model_name = state.selected_model or "gemini-1.5-flash"
     
     # Retrieve API key: Priority 1 (User Input), Priority 2 (Env Var)
-    user_key = state.get("api_key")
+    user_key = state.api_key
     raw_key = user_key or os.getenv(f"{provider.upper()}_API_KEY") or os.getenv("GOOGLE_API_KEY")
     api_key = raw_key.strip() if raw_key else None
     
@@ -83,20 +103,20 @@ async def invoke_llm(structured_class, state: Dict, messages: List):
 
 # --- LANGGRAPH NODE DEFINITIONS ---
 
-async def input_parse_node(state: Dict):
+async def input_parse_node(state: AgentState):
     """Fetches the PR diff from GitHub if only a URL is provided."""
     print("Node: input_parse_node")
-    url = state.get("github_url")
-    diff = state.get("diff", "")
+    url = state.github_url
+    diff = state.diff
     
     if url and not diff:
-        clean_url = url.split("?")[0].rstrip("/")
-        diff_url = clean_url if clean_url.endswith(".diff") else clean_url + ".diff"
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            try:
-                response = await client.get(diff_url, follow_redirects=True)
-                if response.status_code == 200: diff = response.text
-            except Exception: pass
+        diff = await fetch_github_diff_text(url)
+
+    if not diff:
+        return {
+            "status": "failed",
+            "monologue": ["✗ Failed to retrieve code diff. Please check the URL or paste it manually."]
+        }
 
     return {
         "diff": diff, 
@@ -104,15 +124,16 @@ async def input_parse_node(state: Dict):
         "monologue": ["✓ Successfully retrieved code diff from source."]
     }
 
-async def initial_review_node(state: Dict):
+async def initial_review_node(state: AgentState):
     """Performs the first-pass analysis of the code diff."""
     print("Node: initial_review_node")
-    if not state.get("diff"): return {"status": "review_failed_no_diff"}
+    if not state.diff: 
+        return {"status": "failed", "monologue": ["✗ No diff found to review."]}
     
     prompt = f"{REVIEWER_SYSTEM_PROMPT}\nAnalyze the following categories: Security, Performance, Style."
     messages = [
         SystemMessage(content=prompt), 
-        HumanMessage(content=f"Review this PR diff:\n\n{state['diff']}")
+        HumanMessage(content=f"Review this PR diff:\n\n{state.diff}")
     ]
     
     response, used_model = await invoke_llm(ReviewReport, state, messages)
@@ -124,15 +145,16 @@ async def initial_review_node(state: Dict):
         "monologue": [f"🔍 Initial review completed using {used_model}."]
     }
 
-async def critique_node(state: Dict):
+async def critique_node(state: AgentState):
     """The 'Critic' node evaluates the review for quality and accuracy."""
     print("Node: critique_node")
-    if not state.get("self_critique"): return {"status": "critique_skipped"}
+    if not state.self_critique: 
+        return {"status": "critique_skipped", "monologue": ["⏩ Self-critique skipped."]}
     
-    review_json = state["reviews"].model_dump_json()
+    review_json = state.reviews.model_dump_json()
     messages = [
         SystemMessage(content=CRITIQUE_SYSTEM_PROMPT),
-        HumanMessage(content=f"Diff:\n{state['diff']}\n\nReview:\n{review_json}")
+        HumanMessage(content=f"Diff:\n{state.diff}\n\nReview:\n{review_json}")
     ]
     
     response, used_model = await invoke_llm(CritiqueResult, state, messages)
@@ -140,37 +162,37 @@ async def critique_node(state: Dict):
     
     return {"critique": response, "status": "critique_complete", "monologue": [msg]}
 
-async def refinement_node(state: Dict):
+async def refinement_node(state: AgentState):
     """Refines the initial review based on critic feedback."""
     print("Node: refinement_node")
-    review_json = state["reviews"].model_dump_json()
-    critique_json = state["critique"].model_dump_json()
+    review_json = state.reviews.model_dump_json()
+    critique_json = state.critique.model_dump_json()
     
     messages = [
         SystemMessage(content=REFINEMENT_SYSTEM_PROMPT),
-        HumanMessage(content=f"Review:\n{review_json}\nCritique:\n{critique_json}\nDiff:\n{state['diff']}")
+        HumanMessage(content=f"Review:\n{review_json}\nCritique:\n{critique_json}\nDiff:\n{state.diff}")
     ]
     
     response, used_model = await invoke_llm(ReviewReport, state, messages)
     
     return {
         "reviews": response, 
-        "refinement_count": state.get("refinement_count", 0) + 1, 
+        "refinement_count": state.refinement_count + 1, 
         "status": "refinement_complete", 
         "monologue": ["🔄 Refinement cycle finished. Finding accuracy improved."]
     }
 
-def should_refine(state: Dict):
+def should_refine(state: AgentState):
     """Conditional edge logic: decide whether to refine or end the process."""
-    critique = state.get("critique")
+    critique = state.critique
     # Trigger refinement if quality is low AND we haven't looped too many times
-    if critique and critique.score < 80 and state.get("refinement_count", 0) < 2: 
+    if critique and critique.score < 80 and state.refinement_count < 2: 
         return "refine"
     return "end"
 
 # --- WORKFLOW GRAPH CONSTRUCTION ---
 
-workflow = StateGraph(dict)
+workflow = StateGraph(AgentState)
 
 # Add all reasoning nodes
 workflow.add_node("input", input_parse_node)
@@ -193,3 +215,4 @@ workflow.add_edge("refine", "critique")
 
 # Compile the graph into an executable app
 app_graph = workflow.compile()
+

@@ -1,16 +1,11 @@
-/**
- * GitMind Frontend - Main Application Component
- * 
- * This component manages the state of the PR review process, handles real-time 
- * SSE updates from the backend, and provides a rich diff visualization.
- */
-
-import { Component, signal, computed, inject } from '@angular/core';
+import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { marked } from 'marked';
+import { ApiService, LogEntry } from './api.service';
+import { HeaderComponent } from './header.component';
+import { ActivityLogComponent } from './activity-log.component';
 
 // --- DATA MODELS ---
 
@@ -28,12 +23,6 @@ interface ReviewReport {
   summary: string;
   approval_status: 'approved' | 'needs_changes' | 'rejected';
   confidence_score: number;
-}
-
-interface LogEntry {
-  time: string;
-  type: 'info' | 'success' | 'warn' | 'error' | 'accent';
-  msg: string;
 }
 
 interface DiffLine {
@@ -59,12 +48,12 @@ interface DiffFile {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, HeaderComponent, ActivityLogComponent],
   templateUrl: './app.component.html',
 })
-export class App {
+export class App implements OnInit {
   private sanitizer = inject(DomSanitizer);
-  private http = inject(HttpClient);
+  private apiService = inject(ApiService);
 
   // --- UI & STATE SIGNALS ---
   
@@ -77,39 +66,71 @@ export class App {
   
   // Model Selection Signals
   selectedProvider = signal('gemini');
-  selectedModel = signal('gemini-2.5-flash');
+  selectedModel = signal('gemini-1.5-flash');
   userApiKey = signal('');
 
   /**
    * Model Configuration Map
-   * Maps providers to their specific available models.
    */
   modelOptions: Record<string, {label: string, value: string}[]> = {
     gemini: [
-      { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
-      { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
-      { label: 'Gemini 3.0 Flash (Preview)', value: 'gemini-3-flash-preview' },
+      // Gemini 3 Series
       { label: 'Gemini 3.1 Pro (Preview)', value: 'gemini-3.1-pro-preview' },
-      { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' }
+      { label: 'Gemini 3.1 Flash-Lite (Preview)', value: 'gemini-3.1-flash-lite-preview' },
+      { label: 'Gemini 3 Flash (Preview)', value: 'gemini-3-flash-preview' },
+      
+      // Gemini 2.5 Series
+      { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
+      { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+      { label: 'Gemini 2.5 Flash-Lite', value: 'gemini-2.5-flash-lite' },
+      
+      // Gemini 2.0 Series
+      { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
+      { label: 'Gemini 2.0 Flash-Lite (Preview)', value: 'gemini-2.0-flash-lite-preview-02-05' },
+      { label: 'Gemini 2.0 Pro (Exp)', value: 'gemini-2.0-pro-exp-02-05' },
+      { label: 'Gemini 2.0 Flash-Thinking (Exp)', value: 'gemini-2.0-flash-thinking-exp-01-21' },
+      
+      // Gemini 1.5 Series
+      { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
+      { label: 'Gemini 1.5 Pro (Latest)', value: 'gemini-1.5-pro-latest' },
+      { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
+      { label: 'Gemini 1.5 Flash (Latest)', value: 'gemini-1.5-flash-latest' },
+      { label: 'Gemini 1.5 Flash-8B', value: 'gemini-1.5-flash-8b' },
+      
+      // Legacy / Stable
+      { label: 'Gemini 1.0 Pro', value: 'gemini-1.0-pro' }
     ],
     openai: [
+      { label: 'o3-mini', value: 'o3-mini' },
+      { label: 'o1 (Full)', value: 'o1' },
+      { label: 'o1-mini', value: 'o1-mini' },
+      { label: 'o1-preview', value: 'o1-preview' },
       { label: 'GPT-4o', value: 'gpt-4o' },
+      { label: 'GPT-4o (Latest)', value: 'gpt-4o-latest' },
       { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
-      { label: 'GPT-4 Turbo', value: 'gpt-4-turbo' }
+      { label: 'GPT-4 Turbo', value: 'gpt-4-turbo' },
+      { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' }
     ],
     anthropic: [
-      { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20240620' },
+      { label: 'Claude 3.7 Sonnet', value: 'claude-3-7-sonnet-20250219' },
+      { label: 'Claude 3.7 Sonnet (Thinking)', value: 'claude-3-7-sonnet-20250219' }, // Note: Thinking is a param, but listed for clarity
+      { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20241022' },
       { label: 'Claude 3.5 Haiku', value: 'claude-3-5-haiku-20241022' },
-      { label: 'Claude 3 Opus', value: 'claude-3-opus-20240229' }
+      { label: 'Claude 3 Opus', value: 'claude-3-opus-20240229' },
+      { label: 'Claude 3 Sonnet', value: 'claude-3-sonnet-20240229' },
+      { label: 'Claude 3 Haiku', value: 'claude-3-haiku-20240307' }
     ],
     deepseek: [
-      { label: 'DeepSeek Chat (V3)', value: 'deepseek-chat' },
-      { label: 'DeepSeek Coder', value: 'deepseek-coder' }
+      { label: 'DeepSeek-V3', value: 'deepseek-chat' },
+      { label: 'DeepSeek-R1', value: 'deepseek-reasoner' }
     ],
     groq: [
+      { label: 'DeepSeek R1 Distill Llama 70B', value: 'deepseek-r1-distill-llama-70b' },
       { label: 'Llama 3.3 70B', value: 'llama-3.3-70b-versatile' },
       { label: 'Llama 3.1 8B', value: 'llama-3.1-8b-instant' },
-      { label: 'Mixtral 8x7B', value: 'mixtral-8x7b-32768' }
+      { label: 'Llama 3.1 70B', value: 'llama-3.1-70b-versatile' },
+      { label: 'Mixtral 8x7B', value: 'mixtral-8x7b-32768' },
+      { label: 'Gemma 2 9B', value: 'gemma2-9b-it' }
     ]
   };
 
@@ -130,9 +151,6 @@ export class App {
 
   // --- COMPUTED VALUES ---
 
-  /**
-   * Transforms raw markdown into sanitized SafeHtml for the report view.
-   */
   renderedReport = computed<SafeHtml>(() => {
     const md = this.buildMarkdownReport();
     if (!md) return '';
@@ -140,10 +158,6 @@ export class App {
     return this.sanitizer.bypassSecurityTrustHtml(html);
   });
 
-  /**
-   * Parser logic to transform raw Git diff string into a structured 
-   * object model for the rich diff viewer.
-   */
   parsedFiles = computed<DiffFile[]>(() => {
     const raw = this.diffInput();
     if (!raw) return [];
@@ -197,16 +211,13 @@ export class App {
     };
   });
 
-  constructor() {
+  ngOnInit() {
     this.appendLog('info', 'GitMind agent initialized. Awaiting input...');
     this.loadSettings();
   }
 
   // --- DATA PERSISTENCE ---
 
-  /**
-   * Recovers model preferences and API keys from localStorage.
-   */
   loadSettings() {
     if (typeof window !== 'undefined' && window.localStorage) {
       const savedProvider = localStorage.getItem('gitmind_provider');
@@ -219,9 +230,6 @@ export class App {
     }
   }
 
-  /**
-   * Persists current preferences to localStorage.
-   */
   saveSettings() {
     if (typeof window !== 'undefined' && window.localStorage) {
       localStorage.setItem('gitmind_provider', this.selectedProvider());
@@ -246,7 +254,7 @@ export class App {
 
   loadExample() {
     this.diffInput.set(EXAMPLE_DIFF);
-    this.prUrl.set('github.com/example/webapp/pull/142');
+    this.prUrl.set('https://github.com/example/webapp/pull/142');
     this.appendLog('info', 'Example PR diff loaded: webapp/pull/142');
   }
 
@@ -262,10 +270,6 @@ export class App {
     this.nodeStates.update(prev => ({ ...prev, [id]: state }));
   }
 
-  /**
-   * Core Analysis Trigger
-   * Sends PR data to backend and handles the real-time SSE stream.
-   */
   async startAnalysis() {
     const diff = this.diffInput().trim();
     const url = this.prUrl().trim();
@@ -281,79 +285,63 @@ export class App {
     this.refinementCount.set(0);
     this.startTime = Date.now();
     
-    // Reset pipeline UI
     ['input', 'review', 'critique', 'refine', 'output'].forEach(n => this.setNode(n, ''));
     this.setNode('input', 'active');
 
     this.appendLog('info', `▶ Starting analysis using ${this.selectedModel().toUpperCase()}...`);
 
-    try {
-      const response = await fetch('http://localhost:8000/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          diff: diff || null,
-          github_url: url || null,
-          security_scan: this.opts.security,
-          perf_analysis: this.opts.performance,
-          style_review: this.opts.style,
-          self_critique: this.opts.selfCritique,
-          selected_provider: this.selectedProvider(),
-          selected_model: this.selectedModel(),
-          api_key: this.userApiKey() || null
-        })
-      });
-
-      if (!response.body) return;
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      // Stream processor loop
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
+    this.apiService.analyze({
+      diff: diff || null,
+      github_url: url || null,
+      security_scan: this.opts.security,
+      perf_analysis: this.opts.performance,
+      style_review: this.opts.style,
+      self_critique: this.opts.selfCritique,
+      selected_provider: this.selectedProvider(),
+      selected_model: this.selectedModel(),
+      api_key: this.userApiKey() || null
+    }).subscribe({
+      next: (chunk) => {
         const lines = chunk.split('\n');
-        
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6));
-            this.handleAgentEvent(data);
+            try {
+              const data = JSON.parse(line.slice(6));
+              this.handleAgentEvent(data);
+            } catch (e) {
+              console.error('Failed to parse SSE line', line);
+            }
           }
         }
+      },
+      error: (err) => {
+        this.appendLog('error', `✗ Connection error: ${err.message || 'Unknown error'}`);
+        this.isAnalyzing.set(false);
+      },
+      complete: () => {
+        this.isAnalyzing.set(false);
       }
-    } catch (err: any) {
-      this.appendLog('error', `✗ Connection error: ${err.message}`);
-    } finally {
-      this.isAnalyzing.set(false);
-    }
+    });
   }
 
-  /**
-   * Processes individual state updates from the LangGraph backend.
-   */
   handleAgentEvent(data: any) {
     const { node, status, reviews, critique, refinement_count, monologue, message } = data;
 
-    if (node === 'error') {
-      this.appendLog('error', `✗ Backend error: ${message}`);
+    if (node === 'error' || status === 'failed') {
+      this.appendLog('error', `✗ Backend error: ${message || 'Process failed'}`);
       this.isAnalyzing.set(false);
       return;
     }
 
-    // Process "internal monologue" thoughts from the AI
     if (monologue && monologue.length > 0) {
       monologue.forEach((msg: string) => this.appendLog('accent', msg));
     }
 
-    // Sync node animations with backend state
     if (node === 'input') this.setNode('input', 'active');
     else if (node === 'review') { this.setNode('input', 'done'); this.setNode('review', 'active'); }
     else if (node === 'critique') { this.setNode('review', 'done'); this.setNode('critique', 'active'); }
     else if (node === 'refine') { this.setNode('critique', 'done'); this.setNode('refine', 'loop'); this.refinementCount.set(refinement_count); }
 
-    // Final result handling
     if (reviews) {
       this.analysisData.set(reviews);
       this.setNode('output', 'done');
@@ -379,9 +367,6 @@ export class App {
     return (statusMap as any)[data.approval_status] || statusMap['needs_changes'];
   }
 
-  /**
-   * API call to fetch raw diff text via backend proxy.
-   */
   fetchPrDiff() {
     const url = this.prUrl().trim();
     if (!url) {
@@ -391,22 +376,18 @@ export class App {
 
     this.appendLog('info', `▶ Fetching diff from GitHub...`);
     
-    this.http.get<{diff: string}>('http://localhost:8000/fetch-diff', { params: { url } })
-      .subscribe({
-        next: (res) => {
-          this.diffInput.set(res.diff);
-          this.currentTab.set('diff');
-          this.appendLog('success', '✓ Diff fetched and loaded into viewer.');
-        },
-        error: (err: any) => {
-          this.appendLog('error', `✗ Failed to fetch diff: ${err.error?.detail || err.message}`);
-        }
-      });
+    this.apiService.fetchDiff(url).subscribe({
+      next: (res) => {
+        this.diffInput.set(res.diff);
+        this.currentTab.set('diff');
+        this.appendLog('success', '✓ Diff fetched and loaded into viewer.');
+      },
+      error: (err: any) => {
+        this.appendLog('error', `✗ Failed to fetch diff: ${err.error?.detail || err.message}`);
+      }
+    });
   }
 
-  /**
-   * Generates a clean Markdown representation of the review results.
-   */
   buildMarkdownReport() {
     const data = this.analysisData();
     if (!data) return '';
@@ -419,7 +400,6 @@ export class App {
     
     md += `## Executive Summary\n\n${data.summary || 'No summary provided.'}\n\n`;
     
-    // Add findings by category
     ['security', 'performance', 'style'].forEach(cat => {
       const items = (data as any)[cat];
       if (items && items.length > 0) {
@@ -451,7 +431,7 @@ const EXAMPLE_DIFF = `diff --git a/src/auth/userController.js b/src/auth/userCon
 index 1234567..890abcde 100644
 --- a/src/auth/userController.js
 +++ b/src/auth/userController.js
-@@ -8,12 +8,19 @@ const db = require('../db');
+@@ -8,12 +19,19 @@ const db = require('../db');
  
 +const SECRET = "hardcoded_jwt_secret_12345";
 +
@@ -480,6 +460,7 @@ index 1234567..890abcde 100644
 +  for (var i = 0; i < 1000; i++) {
 +    result = redis.get(key);
 +  }
-+  return result;
-+}
-+`;
+return result;
+}
+`;
+

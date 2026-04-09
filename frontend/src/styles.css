@@ -367,65 +367,144 @@ header{
 }
 .markdown-report{
   font-family: var(--sans);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.7;
   color: var(--text);
-  background: var(--bg1);
+  background: rgba(12, 18, 32, 0.4);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 24px;
+  border-radius: 12px;
+  padding: 40px;
   overflow-y: auto;
-  max-height: 600px;
+  max-height: 800px;
+  backdrop-filter: blur(8px);
 }
-.markdown-report h1, .markdown-report h2, .markdown-report h3 {
+
+.markdown-report h1, .markdown-report h2, .markdown-report h3, .markdown-report h4 {
   color: #fff;
-  margin-top: 24px;
-  margin-bottom: 16px;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
   font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
-.markdown-report h1 { font-size: 24px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-.markdown-report h2 { font-size: 20px; }
-.markdown-report h3 { font-size: 18px; color: var(--g); }
-.markdown-report p { margin-bottom: 16px; }
-.markdown-report ul, .markdown-report ol { margin-bottom: 16px; padding-left: 24px; }
-.markdown-report li { margin-bottom: 8px; }
-.markdown-report code {
-  font-family: var(--mono);
-  background: var(--bg3);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
+
+.markdown-report h1 { 
+  font-size: 32px; 
+  border-bottom: 2px solid var(--g); 
+  padding-bottom: 12px;
+  margin-top: 0;
+  background: linear-gradient(90deg, #fff, var(--g));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.markdown-report h2 { 
+  font-size: 24px; 
+  border-left: 4px solid var(--cyan);
+  padding-left: 16px;
+  margin-bottom: 20px;
+}
+
+.markdown-report h3 { 
+  font-size: 19px; 
+  color: var(--g);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.markdown-report h3::before {
+  content: '◆';
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.markdown-report p { margin-bottom: 20px; opacity: 0.9; }
+
+.markdown-report ul, .markdown-report ol { 
+  margin-bottom: 24px; 
+  padding-left: 28px; 
+}
+
+.markdown-report li { 
+  margin-bottom: 12px; 
+  position: relative;
+}
+
+.markdown-report li::marker {
   color: var(--cyan);
 }
-.markdown-report pre {
-  background: #000;
-  padding: 16px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin-bottom: 16px;
-  border: 1px solid var(--border-strong);
+
+.markdown-report code {
+  font-family: var(--mono);
+  background: rgba(56, 212, 245, 0.1);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--cyan);
+  border: 1px solid rgba(56, 212, 245, 0.2);
 }
+
+.markdown-report pre {
+  background: #050810;
+  padding: 24px;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin: 24px 0;
+  border: 1px solid var(--border-strong);
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+}
+
 .markdown-report pre code {
   background: none;
   padding: 0;
   color: var(--text2);
+  border: none;
+  font-size: 13px;
+  line-height: 1.6;
 }
-.export-row{display:flex;gap:10px;margin-top:16px}
-.export-btn{
-  padding: 9px 18px;
-  border-radius: 8px;
+
+.markdown-report hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 40px 0;
+  opacity: 0.5;
+}
+
+.export-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.export-btn {
+  padding: 12px 24px;
+  border-radius: 10px;
   font-family: var(--mono);
-  font-size: 11px;
-  background: var(--bg2);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg3);
   border: 1px solid var(--border-strong);
-  color: var(--text2);
+  color: #fff;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
-.export-btn:hover{border-color:var(--g);color:var(--g)}
+
+.export-btn:hover {
+  border-color: var(--g);
+  color: var(--g);
+  background: rgba(0, 255, 163, 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 255, 163, 0.1);
+}
+
+.export-btn:active {
+  transform: translateY(0);
+}
 
 /* Example button */
 .example-btn{

@@ -1,27 +1,5 @@
 <!-- HEADER -->
-<header>
-  <a class="logo" href="#">
-    <div class="logo-icon">
-      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="16" cy="16" r="14" stroke="#00ffa3" stroke-width="1.2" opacity="0.4"/>
-        <circle cx="16" cy="10" r="3.5" fill="#00ffa3" opacity="0.9"/>
-        <circle cx="8" cy="22" r="3" fill="#38d4f5" opacity="0.8"/>
-        <circle cx="24" cy="22" r="3" fill="#a78bfa" opacity="0.8"/>
-        <line x1="16" y1="13.5" x2="8.5" y2="19.5" stroke="#00ffa3" stroke-width="1" opacity="0.5"/>
-        <line x1="16" y1="13.5" x2="23.5" y2="19.5" stroke="#00ffa3" stroke-width="1" opacity="0.5"/>
-        <line x1="9" y1="22" x2="21" y2="22" stroke="#38d4f5" stroke-width="1" opacity="0.4" stroke-dasharray="2 2"/>
-      </svg>
-    </div>
-    <span class="logo-text">Git<span>Mind</span></span>
-  </a>
-  <div class="header-right">
-    <div class="loop-indicator" [class.visible]="refinementCount() > 0">
-      <span>↻</span><span>Refinement loop</span><span class="loop-count">×{{ refinementCount() }}</span>
-    </div>
-    <span class="header-badge">LangGraph · v2.1</span>
-    <div class="status-dot"><div class="dot"></div><span>Agent online</span></div>
-  </div>
-</header>
+<app-header [refinementCount]="refinementCount()"></app-header>
 
 <!-- APP -->
 <div class="app">
@@ -39,7 +17,7 @@
     </div>
     <div class="input-section">
       <div class="url-row">
-        <input class="url-input" [(ngModel)]="prUrl" placeholder="github.com/owner/repo/pull/42" autocomplete="off"/>
+        <input class="url-input" [(ngModel)]="prUrl" placeholder="https://github.com/owner/repo/pull/42" autocomplete="off"/>
         <button class="fetch-btn" (click)="fetchPrDiff()">Fetch</button>
       </div>
 
@@ -128,15 +106,7 @@
     </div>
 
     <!-- LOG -->
-    <div class="log-section" style="padding-bottom:20px">
-      <div class="section-label" style="padding:14px 0 0">Activity Log</div>
-      <div class="log-box">
-        <div class="log-line" *ngFor="let log of logs()">
-          <span class="log-time">{{ log.time }}</span>
-          <span class="log-msg" [ngClass]="log.type">{{ log.msg }}</span>
-        </div>
-      </div>
-    </div>
+    <app-activity-log [logs]="logs()"></app-activity-log>
   </div>
 
   <!-- RIGHT PANEL -->
@@ -208,14 +178,32 @@
           <!-- Summary Panel -->
           <div class="tab-panel" [class.active]="currentTab() === 'summary'">
             <div class="approval-banner" [ngClass]="getApprovalInfo()?.cls">
-               <div class="approval-icon">{{ getApprovalInfo()?.icon }}</div>
-               <div>
-                 <div class="approval-title">{{ getApprovalInfo()?.label }}</div>
-                 <div class="approval-sub">{{ getApprovalInfo()?.sub }}</div>
+               <div class="approval-left">
+                 <div class="approval-icon">{{ getApprovalInfo()?.icon }}</div>
+                 <div>
+                   <div class="approval-title">{{ getApprovalInfo()?.label }}</div>
+                   <div class="approval-sub">{{ getApprovalInfo()?.sub }}</div>
+                 </div>
+               </div>
+               <div class="approval-score" *ngIf="analysisData()?.confidence_score">
+                 <div class="score-num">{{ analysisData()?.confidence_score }}%</div>
+                 <div class="score-label">Confidence</div>
                </div>
             </div>
+
             <div class="summary-box">
-              {{ analysisData()?.summary }}
+              <div class="group-title" style="margin-bottom: 16px;">Executive Summary</div>
+              <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ analysisData()?.summary }}</p>
+              
+              <div class="conf-bar-wrap" *ngIf="analysisData()?.confidence_score">
+                <div class="conf-bar-label">
+                  <span>AI Confidence Level</span>
+                  <span>{{ analysisData()?.confidence_score }}%</span>
+                </div>
+                <div class="conf-bar-track">
+                  <div class="conf-bar-fill" [style.width.%]="analysisData()?.confidence_score"></div>
+                </div>
+              </div>
             </div>
           </div>
           
