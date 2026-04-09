@@ -5,7 +5,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-Latest-009688.svg)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**GitMind** is an advanced, autonomous code review agent built on a cyclic **Self-Critique & Refinement** architecture. Unlike standard linear AI prompts, GitMind uses a state-machine based reasoning loop to analyze GitHub PRs, critique its own findings, and refine its suggestions before presenting them to the developer.
+**GitMind** is an advanced, autonomous code review agent built on a cyclic **Self-Critique & Refinement** architecture with **Human-in-the-Loop** (HITL) capabilities. It leverages a state-machine based reasoning loop to analyze code changes, critique its own findings, and refine suggestions before presentation.
 
 ---
 
@@ -21,36 +21,40 @@
 
 ---
 
-## 🧠 Core Intelligence Engine
+## 🧠 Core Intelligence Engine: The Reasoning Loop
 
-GitMind operates using a **Cyclic Directed Acyclic Graph (DAG)** powered by **LangGraph**. The agent doesn't just "read and reply"; it follows a rigorous 4-stage cognitive process:
+GitMind operates using a **Cyclic Directed Acyclic Graph (DAG)** powered by **LangGraph**. The agent doesn't just "read and reply"; it follows a rigorous 5-stage cognitive process that allows for iterative improvement.
 
 ```mermaid
 graph TD
     A[📥 Input Parse] --> B[🔍 Initial Review]
-    B --> C[🧠 Self-Critique]
-    C -->|Score < 80| D[🔄 Refinement Loop]
-    D --> C
-    C -->|Score >= 80| E[🏁 Final Report]
+    B --> C[🧠 AI Critique]
+    C --> D[✋ Human Review Node]
+    D -->|Feedback/Low Score| E[🔄 Refinement Loop]
+    E --> C
+    D -->|Approve/High Score| F[🏁 Final Report]
+    
+    style D fill:#f96,stroke:#333,stroke-width:2px
 ```
 
-1.  **📥 Input Parse:** Dynamically fetches and tokenizes raw diffs directly from GitHub.
-2.  **🔍 Initial Review:** Conducts a broad-spectrum analysis (Security, Performance, Style).
-3.  **🧠 Self-Critique:** A separate "critic" node evaluates the review for hallucinations, factual accuracy, and professional tone.
-4.  **🔄 Refinement Loop:** If the critique score is < 80/100, the agent triggers a refinement node to rebuild the review based on the critic's feedback.
+1.  **📥 Input Parse:** Fetches and tokenizes raw diffs directly from GitHub URLs or manual input.
+2.  **🔍 Initial Review:** Conducts a broad-spectrum analysis focusing on Security, Performance, and Style.
+3.  **🧠 AI Critique:** A dedicated "critic" node evaluates the review for hallucinations, factual accuracy, and professional tone, assigning a quality score.
+4.  **✋ Human-in-the-Loop (HITL):** The engine **interrupts** and waits for human feedback. You can correct the agent, ask for deeper focus, or approve the current progress.
+5.  **🔄 Refinement Loop:** If the score is < 80/100 or if human feedback is provided, the agent rebuilds the review to incorporate all insights.
 
 ---
 
 ## 🚀 Key Features
 
-*   **⚡ Multi-Provider Architecture:** 
-    *   **Google Gemini:** `gemini-2.0-flash`, `gemini-1.5-pro`, etc.
-    *   **OpenAI:** `gpt-4o`, `gpt-4o-mini`, `o3-mini`.
-    *   **Anthropic:** `claude-3-5-sonnet`.
-    *   **DeepSeek & Groq:** Low-latency inference for high-speed reviews.
-*   **💾 State Persistence:** Remembers your preferred models and API keys across sessions using secure `localStorage`.
+*   **⚡ Multi-Provider Core:** 
+    *   **Google Gemini:** Optimized for `gemini-2.0-flash` (Research Tier) and `1.5-pro`.
+    *   **Tier 1 Models:** Full support for `gpt-4o`, `claude-3-5-sonnet`, and `o3-mini`.
+    *   **DeepSeek & Groq:** High-speed inference for near-instant critiques.
+*   **📂 Intelligent Navigation:** A new **Signal-based File Tree** component allows you to navigate large PRs with ease.
+*   **💾 State Persistence:** Uses **LangGraph Checkpointers** (MemorySaver) to maintain session state even across server restarts.
 *   **🌐 CORS-Free Proxy:** A dedicated FastAPI backend handles GitHub authentication and diff streaming to bypass browser restrictions.
-*   **🎨 Advanced UI:** Zoneless Angular architecture with a high-fidelity GitHub-dark theme, real-time SSE (Server-Sent Events) logging, and syntax-highlighted diffs.
+*   **🎨 Zoneless Angular UI:** Built with **Angular 20 Signals** for maximum performance and a reactive, zero-latency user experience.
 *   **🧠 Critic's Corner:** Transparent view into the agent's self-correction process and quality scoring.
 
 ---
@@ -61,9 +65,9 @@ graph TD
 | :--- | :--- | :--- |
 | **Frontend** | Angular 20 (Signals, Zoneless) | Reactive UI & State Management |
 | **Backend** | FastAPI (Async) | High-concurrency SSE Streaming |
-| **Orchestration** | LangGraph | State machine & cyclic agent logic |
+| **Orchestration** | LangGraph | State machine & HITL interruption logic |
 | **LLM Framework** | LangChain | Multi-provider abstraction layer |
-| **Visuals** | Marked.js | Professional Markdown rendering |
+| **Persistence** | MemorySaver | Graph state & checkpointing |
 
 ---
 
@@ -72,13 +76,13 @@ graph TD
 ```text
 GitMind/
 ├── backend/                # FastAPI + LangGraph Logic
-│   ├── agent.py            # LangGraph workflow definition
+│   ├── agent.py            # LangGraph workflow & node definitions
 │   ├── main.py             # FastAPI entry point & SSE streaming
-│   ├── prompts.py          # System prompts for Reviewer/Critic/Refiner
-│   ├── schemas.py          # Pydantic models for type-safe state
+│   ├── prompts.py          # Expert System Prompts (Reviewer/Critic/Refiner)
+│   ├── schemas.py          # Pydantic models for Agent State & Reports
 │   └── requirements.txt    # Python dependencies
 ├── frontend/               # Angular 20 Application
-│   ├── src/app/            # Component & Service logic
+│   ├── src/app/            # Components (FileTree, ActivityLog, etc.)
 │   ├── src/styles.css      # Custom Cyberpunk/GitHub-Dark theme
 │   └── package.json        # Frontend dependencies
 └── README.md               # Documentation
@@ -91,7 +95,7 @@ GitMind/
 ### 1. Prerequisites
 - Python 3.10+
 - Node.js 20+
-- A valid API Key (Gemini, OpenAI, or Anthropic)
+- API Key (Gemini, OpenAI, or Anthropic)
 
 ### 2. Backend Setup
 ```bash
@@ -109,23 +113,6 @@ python main.py
 cd frontend
 npm install
 npm start
-```
-
----
-
-## 🔐 Environment Variables
-
-Configure your `backend/.env` to enable multiple providers:
-
-```env
-# Google Gemini (Primary)
-GOOGLE_API_KEY=your_key_here
-
-# Optional Providers
-OPENAI_API_KEY=your_key_here
-ANTHROPIC_API_KEY=your_key_here
-DEEPSEEK_API_KEY=your_key_here
-GROQ_API_KEY=your_key_here
 ```
 
 ---

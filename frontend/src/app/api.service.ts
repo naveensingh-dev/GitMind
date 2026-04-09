@@ -20,8 +20,16 @@ export class ApiService {
   }
 
   analyze(payload: any): Observable<string> {
+    return this.createSseObservable(`${this.baseUrl}/analyze`, payload);
+  }
+
+  provideFeedback(threadId: string, feedback: string): Observable<string> {
+    return this.createSseObservable(`${this.baseUrl}/feedback`, { thread_id: threadId, feedback });
+  }
+
+  private createSseObservable(url: string, payload: any): Observable<string> {
     return new Observable(observer => {
-      fetch(`${this.baseUrl}/analyze`, {
+      fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

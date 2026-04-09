@@ -13,6 +13,22 @@
 
 <!-- APP -->
 <div class="app">
+  <!-- SIDEBAR (File Tree) -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="panel-title">
+        <svg class="panel-title-icon" viewBox="0 0 18 18" fill="none">
+          <path d="M3 3h12v12H3V3z" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M7 3v12" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+        Files
+      </div>
+    </div>
+    <div class="sidebar-content">
+      <app-file-tree [files]="filePaths()" [selectedPath]="selectedFilePath()" (fileSelect)="scrollToFile($event)"></app-file-tree>
+    </div>
+  </div>
+
   <!-- LEFT PANEL -->
   <div class="left-panel">
     <div class="panel-header">
@@ -27,12 +43,15 @@
     </div>
     <div class="input-section">
       <div class="url-row">
-        <input class="url-input" [(ngModel)]="prUrl" placeholder="https://github.com/owner/repo/pull/42" autocomplete="off"/>
+        <input class="url-input" 
+               [ngModel]="prUrl()" 
+               (ngModelChange)="prUrl.set($event)"
+               placeholder="https://github.com/owner/repo/pull/42" autocomplete="off"/>
         <button class="fetch-btn" (click)="fetchPrDiff()">Fetch</button>
       </div>
 
       <!-- Advanced Model & API Key Selection -->
-      <div class="config-row" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+      <div class="config-row" style="display: flex; flex-direction: column; gap: 8px;">
         <div class="select-wrapper" style="position: relative;">
           <select class="url-input" 
                   [ngModel]="selectedProvider()" 
@@ -63,7 +82,7 @@
                placeholder="Enter API Key (Optional)" autocomplete="off"/>
       </div>
       
-      <div class="options-row" style="margin-top: 10px;">
+      <div class="options-row">
         <label class="option-chip">
           <input type="checkbox" [(ngModel)]="opts.security"/>
           <span class="option-label">🔐 Security</span>
@@ -83,7 +102,7 @@
       </div>
       
       <!-- Analyze Button: Only Shown when diff exists -->
-      <button *ngIf="diffInput()" class="analyze-btn" [disabled]="isAnalyzing()" (click)="startAnalysis()" style="margin-top: 10px;">
+      <button *ngIf="diffInput()" class="analyze-btn" [disabled]="isAnalyzing()" (click)="startAnalysis()">
         <span>{{ isAnalyzing() ? '⏳ Running...' : '⚡ Analyze PR' }}</span>
       </button>
     </div>
@@ -104,6 +123,10 @@
           <div class="node-circle"><div class="node-spin"></div><span>🧠</span></div>
           <div class="node-label">Critique</div>
         </div>
+        <div class="pipe-node" [class]="nodeStates()['human_review']">
+          <div class="node-circle"><div class="node-spin"></div><span>👤</span></div>
+          <div class="node-label">Human</div>
+        </div>
         <div class="pipe-node" [class]="nodeStates()['refine']">
           <div class="node-circle"><div class="node-spin"></div><span>🔄</span></div>
           <div class="node-label">Refine</div>
@@ -112,6 +135,20 @@
           <div class="node-circle"><div class="node-spin"></div><span>✅</span></div>
           <div class="node-label">Final</div>
         </div>
+      </div>
+    </div>
+
+    <!-- HUMAN FEEDBACK UI -->
+    <div class="feedback-section" *ngIf="isAwaitingFeedback()">
+      <div class="section-label">Human-in-the-Loop Refinement</div>
+      <div class="feedback-box">
+        <textarea class="feedback-input" 
+                  [ngModel]="userFeedback()" 
+                  (ngModelChange)="userFeedback.set($event)"
+                  placeholder="Provide feedback to refine the AI review (e.g., 'Ignore the hardcoded secret, it's a test file')"></textarea>
+        <button class="submit-feedback-btn" (click)="submitFeedback()">
+          <span>Apply Refinement 🚀</span>
+        </button>
       </div>
     </div>
 
@@ -159,7 +196,7 @@
           <!-- Diff Tab -->
           <div class="tab-panel" [class.active]="currentTab() === 'diff'">
             <div class="diff-container">
-              <div *ngFor="let file of parsedFiles()" class="file-block">
+              <div *ngFor="let file of parsedFiles()" class="file-block" [id]="'file-' + file.path">
                 <div class="file-header" (click)="toggleFile(file)">
                   <span class="chevron" [class.open]="file.isOpen">▼</span>
                   <span class="file-path">{{ file.path }}</span>

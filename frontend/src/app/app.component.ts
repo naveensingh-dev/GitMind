@@ -6,6 +6,7 @@ import { marked } from 'marked';
 import { ApiService, LogEntry } from './api.service';
 import { HeaderComponent } from './header.component';
 import { ActivityLogComponent } from './activity-log.component';
+import { FileTreeComponent } from './file-tree.component';
 
 // --- DATA MODELS ---
 
@@ -48,7 +49,7 @@ interface DiffFile {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, HeaderComponent, ActivityLogComponent],
+  imports: [CommonModule, FormsModule, HeaderComponent, ActivityLogComponent, FileTreeComponent],
   templateUrl: './app.component.html',
 })
 export class App implements OnInit {
@@ -65,7 +66,13 @@ export class App implements OnInit {
   analysisData = signal<ReviewReport | null>(null);
   critiqueData = signal<{ score: number, feedback?: string, accurate?: boolean } | null>(null);
   errorMessage = signal<string | null>(null);
+  selectedFilePath = signal<string | null>(null);
   
+  // Human-in-the-loop signals
+  threadId = signal<string | null>(null);
+  isAwaitingFeedback = signal(false);
+  userFeedback = signal('');
+
   // Model Selection Signals
   selectedProvider = signal('gemini');
   selectedModel = signal('gemini-1.5-flash');
@@ -137,7 +144,7 @@ export class App implements OnInit {
 
   // Pipeline Execution States
   nodeStates = signal<Record<string, string>>({
-    input: '', review: '', critique: '', refine: '', output: ''
+    input: '', review: '', critique: '', human_review: '', refine: '', output: ''
   });
 
   // Analysis Configuration
@@ -156,6 +163,8 @@ export class App implements OnInit {
     const html = marked.parse(md) as string;
     return this.sanitizer.bypassSecurityTrustHtml(html);
   });
+
+  filePaths = computed(() => this.parsedFiles().map(f => f.path));
 
   parsedFiles = computed<DiffFile[]>(() => {
     const raw = this.diffInput();
@@ -280,11 +289,13 @@ export class App implements OnInit {
 
     this.saveSettings();
     this.isAnalyzing.set(true);
+    this.isAwaitingFeedback.set(false);
     this.analysisData.set(null);
     this.refinementCount.set(0);
+    this.threadId.set(null);
     this.startTime = Date.now();
     
-    ['input', 'review', 'critique', 'refine', 'output'].forEach(n => this.setNode(n, ''));
+    ['input', 'review', 'critique', 'human_review', 'refine', 'output'].forEach(n => this.setNode(n, ''));
     this.setNode('input', 'active');
 
     this.appendLog('info', `▶ Starting analysis using ${this.selectedModel().toUpperCase()}...`);
@@ -300,31 +311,40 @@ export class App implements OnInit {
       selected_model: this.selectedModel(),
       api_key: this.userApiKey() || null
     }).subscribe({
-      next: (chunk) => {
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              this.handleAgentEvent(data);
-            } catch (e) {
-              console.error('Failed to parse SSE line', line);
-            }
-          }
-        }
-      },
+      next: (chunk) => this.processStreamChunk(chunk),
       error: (err) => {
         this.appendLog('error', `✗ Connection error: ${err.message || 'Unknown error'}`);
         this.isAnalyzing.set(false);
       },
       complete: () => {
-        this.isAnalyzing.set(false);
+        if (!this.isAwaitingFeedback()) {
+          this.isAnalyzing.set(false);
+        }
       }
     });
   }
 
+  processStreamChunk(chunk: string) {
+    const lines = chunk.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          this.handleAgentEvent(data);
+        } catch (e) {
+          console.error('Failed to parse SSE line', line);
+        }
+      }
+    }
+  }
+
   handleAgentEvent(data: any) {
-    const { node, status, reviews, critique, refinement_count, monologue, message } = data;
+    const { node, status, reviews, critique, refinement_count, monologue, message, thread_id } = data;
+
+    if (thread_id) {
+      this.threadId.set(thread_id);
+      return;
+    }
 
     if (node === 'error' || status === 'failed') {
       const isQuota = message?.includes('RESOURCE_EXHAUSTED') || message?.includes('429');
@@ -341,6 +361,14 @@ export class App implements OnInit {
       monologue.forEach((msg: string) => this.appendLog('accent', msg));
     }
 
+    if (status === 'awaiting_feedback' || node === 'human_review') {
+      this.isAwaitingFeedback.set(true);
+      this.isAnalyzing.set(false);
+      this.setNode('critique', 'done');
+      this.setNode('human_review', 'active');
+      this.appendLog('warn', '✋ Waiting for human feedback. Scroll to refinement UI below.');
+    }
+
     if (node === 'input') this.setNode('input', 'active');
     else if (node === 'review') { this.setNode('input', 'done'); this.setNode('review', 'active'); }
     else if (node === 'critique') { 
@@ -348,15 +376,48 @@ export class App implements OnInit {
       this.setNode('critique', 'active'); 
       if (critique) this.critiqueData.set(critique);
     }
-    else if (node === 'refine') { this.setNode('critique', 'done'); this.setNode('refine', 'loop'); this.refinementCount.set(refinement_count); }
+    else if (node === 'refine') { 
+      this.setNode('human_review', 'done'); 
+      this.setNode('refine', 'loop'); 
+      this.refinementCount.set(refinement_count); 
+    }
 
     if (reviews) {
       this.analysisData.set(reviews);
       this.setNode('output', 'done');
       this.setNode('refine', reviews.confidence_score > 80 ? 'done' : '');
       this.setNode('critique', 'done');
+      this.setNode('human_review', 'done');
       this.appendLog('success', '✓ Analysis complete. Report generated.');
+      this.isAwaitingFeedback.set(false);
+      this.isAnalyzing.set(false);
     }
+  }
+
+  submitFeedback() {
+    const feedback = this.userFeedback().trim();
+    const threadId = this.threadId();
+    
+    if (!threadId) return;
+
+    this.isAnalyzing.set(true);
+    this.isAwaitingFeedback.set(false);
+    this.appendLog('info', `▶ Resuming analysis with human feedback...`);
+
+    this.apiService.provideFeedback(threadId, feedback).subscribe({
+      next: (chunk) => this.processStreamChunk(chunk),
+      error: (err) => {
+        this.appendLog('error', `✗ Feedback error: ${err.message || 'Unknown error'}`);
+        this.isAnalyzing.set(false);
+      },
+      complete: () => {
+        if (!this.isAwaitingFeedback()) {
+          this.isAnalyzing.set(false);
+        }
+      }
+    });
+    
+    this.userFeedback.set(''); // Clear input
   }
 
   clearError() {
@@ -435,6 +496,19 @@ export class App implements OnInit {
 
   toggleFile(file: DiffFile) {
     file.isOpen = !file.isOpen;
+  }
+
+  scrollToFile(path: string) {
+    this.selectedFilePath.set(path);
+    this.currentTab.set('diff');
+    
+    // Give Angular time to switch tab if needed
+    setTimeout(() => {
+      const element = document.getElementById(`file-${path}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   }
 
   /**

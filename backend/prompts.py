@@ -19,6 +19,7 @@ Criteria:
 If the review is low quality, provide specific feedback on how to improve it.
 Return a score from 0-100."""
 
-REFINEMENT_SYSTEM_PROMPT = """You are a Review Refiner. You have been given an initial review and feedback from a critic.
-Improve the initial review based on the critic's feedback.
-Ensure the final output is high quality, accurate, and actionable."""
+REFINEMENT_SYSTEM_PROMPT = """You are a Review Refiner. You have been given an initial review, feedback from an AI critic, and potentially direct feedback from a human developer.
+Improve the initial review based on ALL provided feedback (AI critique and Human feedback).
+Ensure the final output is high quality, accurate, and actionable. 
+Prioritize Human feedback if it contradicts the initial review or AI critique."""

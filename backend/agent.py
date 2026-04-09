@@ -7,7 +7,7 @@ It uses a Self-Critique & Refinement loop to ensure high-quality code reviews.
 import os
 import httpx
 import asyncio
-from typing import Dict, TypedDict, List
+from typing import Dict, TypedDict, List, Optional
 from langgraph.graph import StateGraph, END
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
@@ -162,15 +162,24 @@ async def critique_node(state: AgentState):
     
     return {"critique": response, "status": "critique_complete", "monologue": [msg]}
 
+async def human_review_node(state: AgentState):
+    """
+    Human Review Node: Placeholder for human feedback.
+    The graph will interrupt here.
+    """
+    print("Node: human_review_node")
+    return {"status": "awaiting_feedback", "monologue": ["✋ Agent paused. Waiting for human refinement..."]}
+
 async def refinement_node(state: AgentState):
-    """Refines the initial review based on critic feedback."""
+    """Refines the initial review based on AI critique and Human feedback."""
     print("Node: refinement_node")
     review_json = state.reviews.model_dump_json()
-    critique_json = state.critique.model_dump_json()
+    critique_json = state.critique.model_dump_json() if state.critique else "{}"
+    human_feedback = state.human_feedback or "No human feedback provided."
     
     messages = [
         SystemMessage(content=REFINEMENT_SYSTEM_PROMPT),
-        HumanMessage(content=f"Review:\n{review_json}\nCritique:\n{critique_json}\nDiff:\n{state.diff}")
+        HumanMessage(content=f"Review:\n{review_json}\nAI Critique:\n{critique_json}\nHuman Feedback:\n{human_feedback}\nDiff:\n{state.diff}")
     ]
     
     response, used_model = await invoke_llm(ReviewReport, state, messages)
@@ -178,12 +187,17 @@ async def refinement_node(state: AgentState):
     return {
         "reviews": response, 
         "refinement_count": state.refinement_count + 1, 
+        "human_feedback": None, # Clear feedback after using it
         "status": "refinement_complete", 
-        "monologue": ["🔄 Refinement cycle finished. Finding accuracy improved."]
+        "monologue": ["🔄 Refinement cycle finished. Incorporated feedback for improved accuracy."]
     }
 
 def should_refine(state: AgentState):
     """Conditional edge logic: decide whether to refine or end the process."""
+    # If human provided feedback, ALWAYS refine
+    if state.human_feedback:
+        return "refine"
+        
     critique = state.critique
     # Trigger refinement if quality is low AND we haven't looped too many times
     if critique and critique.score < 80 and state.refinement_count < 2: 
@@ -198,21 +212,28 @@ workflow = StateGraph(AgentState)
 workflow.add_node("input", input_parse_node)
 workflow.add_node("review", initial_review_node)
 workflow.add_node("critique", critique_node)
+workflow.add_node("human_review", human_review_node)
 workflow.add_node("refine", refinement_node)
 
 # Set execution flow
 workflow.set_entry_point("input")
 workflow.add_edge("input", "review")
 workflow.add_edge("review", "critique")
+workflow.add_edge("critique", "human_review")
 
 # Conditional loop for refinement
 workflow.add_conditional_edges(
-    "critique", 
+    "human_review", 
     should_refine, 
     {"refine": "refine", "end": END}
 )
 workflow.add_edge("refine", "critique")
 
-# Compile the graph into an executable app
-app_graph = workflow.compile()
+from langgraph.checkpoint.memory import MemorySaver
 
+# ... (rest of the file remains same until compilation)
+
+# Compile the graph into an executable app
+# We interrupt before human_review to wait for input
+memory = MemorySaver()
+app_graph = workflow.compile(checkpointer=memory, interrupt_before=["human_review"])
