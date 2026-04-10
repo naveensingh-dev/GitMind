@@ -398,51 +398,287 @@ header{
   background:var(--bg2);border:1px solid var(--border);border-radius:10px;
   padding:20px;font-size:13px;line-height:1.8;color:var(--text);
 }
-.markdown-report{
-  font-family: var(--sans);
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--text);
-  background: rgba(12, 18, 32, 0.4);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 40px;
-  backdrop-filter: blur(8px);
-}
+/* ──── RAW REPORT TAB ──── */
 
-.markdown-report h1 { 
-  font-size: 28px; 
-  border-bottom: 2px solid var(--g); 
-  padding-bottom: 12px;
-  margin-bottom: 24px;
-  color: #fff;
-}
-
-.export-row {
+/* Actions bar at top */
+.report-actions-bar {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 24px;
-}
-
-.export-btn {
+  align-items: center;
+  justify-content: space-between;
   padding: 12px 24px;
-  border-radius: 10px;
+  background: rgba(12, 18, 32, 0.6);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  flex-wrap: wrap;
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.report-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.report-meta-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--g);
+  background: rgba(0,255,163,0.07);
+  border: 1px solid rgba(0,255,163,0.2);
+  border-radius: 20px;
+  padding: 4px 12px;
+  text-transform: uppercase;
+}
+.meta-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--g);
+  box-shadow: 0 0 6px var(--g);
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+.report-meta-model {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+.meta-icon { width: 13px; height: 13px; opacity: 0.5; }
+.report-meta-stats { display: flex; gap: 6px; }
+.meta-stat {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
   font-weight: 600;
-  background: var(--bg3);
+}
+.meta-stat.high { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+.meta-stat.med  { background: rgba(251,191,36,0.1);  color: var(--yellow); border: 1px solid rgba(251,191,36,0.2); }
+.meta-stat.low  { background: rgba(56,212,245,0.08); color: var(--cyan); border: 1px solid rgba(56,212,245,0.15); }
+.report-actions-right { display: flex; gap: 8px; flex-shrink: 0; }
+.report-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  background: var(--bg2);
   border: 1px solid var(--border-strong);
-  color: #fff;
+  border-radius: 8px;
+  color: var(--text2);
+  font-family: var(--mono);
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
+}
+.report-action-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.report-action-btn:hover {
+  border-color: var(--g);
+  color: var(--g);
+  background: rgba(0,255,163,0.05);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,255,163,0.1);
+}
+
+/* Two-column: gutter + content */
+.report-body-wrap {
+  display: flex;
+  padding: 32px 28px;
+  gap: 20px;
+  min-height: 0;
+}
+.report-gutter {
+  width: 2px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--g) 0%, rgba(0,255,163,0.08) 40%, transparent 100%);
+  border-radius: 2px;
+  margin-top: 6px;
+}
+
+/* ── The Markdown content itself ── */
+.markdown-report {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--text);
+}
+
+.markdown-report h1 {
+  font-family: var(--display);
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.markdown-report h1::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 64px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--g), var(--cyan));
+  border-radius: 2px;
+}
+
+.markdown-report h2 {
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-top: 38px;
+  margin-bottom: 14px;
   display: flex;
   align-items: center;
   gap: 10px;
 }
+.markdown-report h2::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  flex-shrink: 0;
+}
+.markdown-report h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(56,212,245,0.25), transparent);
+}
 
-.export-btn:hover {
-  border-color: var(--g);
+.markdown-report h3 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--purple);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-top: 24px;
+  margin-bottom: 10px;
+  font-family: var(--mono);
+}
+.markdown-report h3::before {
+  content: '## ';
+  color: rgba(167,139,250,0.35);
+}
+
+.markdown-report p { margin-bottom: 14px; }
+
+.markdown-report ul, .markdown-report ol {
+  padding-left: 0;
+  margin-bottom: 16px;
+  list-style: none;
+}
+.markdown-report li {
+  position: relative;
+  padding: 4px 0 4px 22px;
+  color: var(--text);
+}
+.markdown-report ul li::before {
+  content: '▸';
+  position: absolute;
+  left: 4px;
   color: var(--g);
+  font-size: 11px;
+  top: 5px;
+}
+.markdown-report ol { counter-reset: report-counter; }
+.markdown-report ol li { counter-increment: report-counter; }
+.markdown-report ol li::before {
+  content: counter(report-counter);
+  position: absolute;
+  left: 0;
+  width: 18px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--cyan);
+  font-weight: 700;
+  top: 5px;
+}
+
+.markdown-report strong { color: #fff; font-weight: 600; }
+.markdown-report em     { color: var(--text2); font-style: italic; }
+
+/* Inline code */
+.markdown-report :not(pre) > code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: rgba(56,212,245,0.09);
+  color: var(--cyan);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56,212,245,0.18);
+}
+
+/* Code blocks */
+.markdown-report pre {
+  position: relative;
+  background: var(--bg0);
+  border: 1px solid var(--border);
+  border-left: 3px solid rgba(0,255,163,0.3);
+  border-radius: 8px;
+  padding: 18px;
+  margin: 20px 0;
+  overflow-x: auto;
+}
+.markdown-report pre::after {
+  content: 'CODE';
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: 0.1em;
+}
+.markdown-report pre code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text2);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* Blockquotes */
+.markdown-report blockquote {
+  border-left: 3px solid rgba(167,139,250,0.4);
+  background: rgba(167,139,250,0.04);
+  margin: 20px 0;
+  padding: 14px 20px;
+  border-radius: 0 8px 8px 0;
+  color: var(--text2);
+  font-style: italic;
+}
+.markdown-report blockquote p { margin: 0; }
+
+/* Horizontal rule */
+.markdown-report hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+  margin: 36px 0;
 }
 
 /* Example button */
@@ -605,8 +841,13 @@ header{
   cursor: pointer;
 }
 
-/* Syntax Highlighting */
-.hl-keyword { color: var(--purple); font-weight: 600; }
-.hl-string { color: var(--yellow); }
-.hl-comment { color: var(--text3); font-style: italic; }
-.hl-number { color: var(--orange); }
+/* Syntax Highlighting (highlight.js overrides) */
+.hljs { color: var(--text2); background: transparent; }
+.hljs-keyword, .hljs-built_in { color: var(--purple); font-weight: 600; }
+.hljs-string, .hljs-meta .hljs-string { color: var(--yellow); }
+.hljs-number { color: var(--orange); }
+.hljs-comment, .hljs-quote { color: var(--text3); font-style: italic; }
+.hljs-variable, .hljs-template-variable, .hljs-attribute, .hljs-tag, .hljs-name, .hljs-regexp, .hljs-link, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: var(--red); }
+.hljs-title, .hljs-section, .hljs-title.function_, .hljs-class .hljs-title, .hljs-type { color: var(--cyan); }
+.hljs-symbol, .hljs-bullet, .hljs-subst, .hljs-meta, .hljs-meta .hljs-keyword, .hljs-selector-attr, .hljs-selector-pseudo, .hljs-addition { color: var(--g); }
+.hljs-deletion { color: var(--red); }

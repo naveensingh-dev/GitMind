@@ -37,10 +37,12 @@ export class ApiService {
 
   private createSseObservable(url: string, payload: any): Observable<string> {
     return new Observable(observer => {
+      const abortController = new AbortController();
       fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: abortController.signal
       }).then(response => {
         if (!response.body) {
           observer.error('No response body');
@@ -58,10 +60,20 @@ export class ApiService {
             const chunk = decoder.decode(value);
             observer.next(chunk);
             push();
-          }).catch(err => observer.error(err));
+          }).catch(err => {
+            if (err.name !== 'AbortError') {
+              observer.error(err);
+            }
+          });
         };
         push();
-      }).catch(err => observer.error(err));
+      }).catch(err => {
+        if (err.name !== 'AbortError') {
+          observer.error(err);
+        }
+      });
+
+      return () => abortController.abort();
     });
   }
 }

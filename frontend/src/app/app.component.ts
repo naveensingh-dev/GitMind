@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+import hljs from 'highlight.js';
 import { ApiService, LogEntry } from './api.service';
 import { HeaderComponent } from './header.component';
 import { ActivityLogComponent } from './activity-log.component';
@@ -60,34 +62,39 @@ export class App implements OnInit {
 
   // --- UI & STATE SIGNALS ---
   
-  prUrl = signal('');
-  diffInput = signal('');
-  isAnalyzing = signal(false);
-  currentTab = signal('diff');
-  logs = signal<LogEntry[]>([]);
-  analysisData = signal<ReviewReport | null>(null);
-  critiqueData = signal<{ score: number, feedback?: string, accurate?: boolean } | null>(null);
-  errorMessage = signal<string | null>(null);
-  selectedFilePath = signal<string | null>(null);
+  prUrl = signal(''); // Holds the current GitHub PR or Commit URL
+  diffInput = signal(''); // Raw diff text (either fetched or pasted)
+  isAnalyzing = signal(false); // Indicates if an analysis is currently in progress
+  currentTab = signal('diff'); // Currently active tab in the main view
+  logs = signal<LogEntry[]>([]); // Array of logs for the activity sidebar
+  analysisData = signal<ReviewReport | null>(null); // Final structured review report from the agent
+  critiqueData = signal<{ score: number, feedback?: string, accurate?: boolean } | null>(null); // AI self-critique results
+  errorMessage = signal<string | null>(null); // User-facing error messages
+  successMessage = signal<string | null>(null); // User-facing success messages (e.g., after completion)
+  selectedFilePath = signal<string | null>(null); // Path of the file currently selected in the tree
   
   // Human-in-the-loop signals
-  threadId = signal<string | null>(null);
-  isAwaitingFeedback = signal(false);
-  userFeedback = signal('');
+  threadId = signal<string | null>(null); // LangGraph thread ID for session persistence
+  isAwaitingFeedback = signal(false); // True if the agent is paused waiting for user input
+  userFeedback = signal(''); // Current text in the feedback textarea
 
-  // Model Selection Signals
+  // Model Selection & Credentials
   selectedProvider = signal('gemini');
   selectedModel = signal('gemini-1.5-flash');
-  userApiKey = signal('');
-  
-  // Use a simple property for token input to ensure ngModel compatibility
+  userApiKey = signal(''); // Locally provided API key (overrides server-side env vars)
   githubTokenInput = '';
-  githubToken = signal('');
+  githubToken = signal(''); // GitHub Personal Access Token for PR comments
 
+  /**
+   * Updates the GitHub token and persists it to local storage.
+   */
   onTokenInputChange(val: string) {
     this.githubTokenInput = val;
     this.githubToken.set(val);
     this.saveSettings();
+    if (val) {
+      this.appendLog('success', '✓ GitHub PAT updated and saved locally.');
+    }
   }
 
   /**
@@ -173,7 +180,8 @@ export class App implements OnInit {
     const md = this.buildMarkdownReport();
     if (!md) return '';
     const html = marked.parse(md) as string;
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    const cleanHtml = DOMPurify.sanitize(html);
+    return this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
   });
 
   filePaths = computed(() => this.parsedFiles().map(f => f.path));
@@ -248,10 +256,7 @@ export class App implements OnInit {
       if (savedProvider) this.selectedProvider.set(savedProvider);
       if (savedModel) this.selectedModel.set(savedModel);
       if (savedApiKey) this.userApiKey.set(savedApiKey);
-      if (savedGithubToken) {
-        this.githubToken.set(savedGithubToken);
-        this.githubTokenInput = savedGithubToken;
-      }
+      if (savedGithubToken) this.githubToken.set(savedGithubToken);
     }
   }
 
@@ -261,6 +266,7 @@ export class App implements OnInit {
       localStorage.setItem('gitmind_model', this.selectedModel());
       localStorage.setItem('gitmind_apikey', this.userApiKey());
       localStorage.setItem('gitmind_github_token', this.githubToken());
+      this.appendLog('success', '✓ Agent settings and PAT saved.');
     }
   }
 
@@ -366,12 +372,9 @@ export class App implements OnInit {
     }
 
     if (node === 'error' || status === 'failed') {
-      const isQuota = message?.includes('RESOURCE_EXHAUSTED') || message?.includes('429');
-      if (isQuota) {
-        this.errorMessage.set('NEURAL LINK OVERLOAD: API quota exhausted. Please switch to a different model or wait a moment before retrying.');
-      } else {
-        this.appendLog('error', `✗ Backend error: ${message || 'Process failed'}`);
-      }
+      const displayMsg = this.getUserFriendlyErrorMessage(message || 'Process failed');
+      this.errorMessage.set(displayMsg);
+      this.appendLog('error', `✗ Error: ${displayMsg}`);
       this.isAnalyzing.set(false);
       return;
     }
@@ -408,9 +411,36 @@ export class App implements OnInit {
       this.setNode('critique', 'done');
       this.setNode('human_review', 'done');
       this.appendLog('success', '✓ Analysis complete. Report generated.');
+      this.successMessage.set('The code review analysis has completed successfully. Your report is ready!');
       this.isAwaitingFeedback.set(false);
       this.isAnalyzing.set(false);
     }
+  }
+
+  getUserFriendlyErrorMessage(rawMessage: string): string {
+    const msg = rawMessage.toLowerCase();
+    
+    // Check for exhaustive limits / rate limits
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('exhausted') || msg.includes('rate_limit')) {
+      return "Quota Exhausted: Your API provider's resource limits or billing constraints have been hit. Please check your account dashboard or try switching to a different LLM model.";
+    }
+    
+    // Check for auth / invalid key
+    if (msg.includes('401') || msg.includes('400') && msg.includes('api key') || msg.includes('unauthorized') || msg.includes('invalid api key') || msg.includes('incorrect api key') || msg.includes('api_key_invalid')) {
+      return "Invalid API Key: The LLM API key provided is missing, invalid, or incorrect. Please check the Agent Controls panel and ensure you have entered a valid key for the selected model.";
+    }
+    
+    // Check for permissions
+    if (msg.includes('403') || msg.includes('forbidden') || msg.includes('permission denied')) {
+      return "Permission Denied: Ensure you have the required access rights for this model, and your GitHub PAT has the correct read scopes for the linked repository.";
+    }
+
+    // Check for model context capacity exceeded
+    if (msg.includes('context') || msg.includes('too many tokens') || msg.includes('maximum context length')) {
+      return "Context Limit Exceeded: This Pull Request is too large for the selected model. Try using a model with a larger context window (like Gemini 1.5 Pro or Claude 3.5).";
+    }
+
+    return "An unexpected error occurred during processing: " + rawMessage;
   }
 
   submitFeedback() {
@@ -441,6 +471,10 @@ export class App implements OnInit {
 
   clearError() {
     this.errorMessage.set(null);
+  }
+
+  clearSuccess() {
+    this.successMessage.set(null);
   }
 
   switchTab(name: string) {
@@ -515,8 +549,7 @@ export class App implements OnInit {
 
   pushToGithub(item: ReviewItem) {
     const url = this.prUrl().trim();
-    // Prioritize direct property if signal is being flaky
-    const token = (this.githubToken() || this.githubTokenInput || '').trim();
+    const token = this.githubToken().trim();
 
     if (!url) {
       this.appendLog('error', 'PR URL is required to push comments.');
@@ -524,7 +557,7 @@ export class App implements OnInit {
     }
 
     if (!token) {
-      this.appendLog('error', 'GitHub PAT is required to push comments. Enter it in Agent Controls.');
+      this.appendLog('error', 'GitHub PAT is missing. Please enter it in the "Agent Controls" panel on the left and ensure it is saved.');
       return;
     }
 
@@ -557,33 +590,17 @@ export class App implements OnInit {
     }, 100);
   }
 
-  /**
-   * Simple Regex-based Syntax Highlighting for the Diff Viewer
-   */
   highlightCode(code: string): SafeHtml {
     if (!code) return '';
-    
-    // Escape HTML first
-    let html = code
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    // 1. Comments
-    html = html.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, '<span class="hl-comment">$1</span>');
-    
-    // 2. Strings
-    html = html.replace(/("(?:\\"|[^"])*"|'(?:\\'|[^'])*'|`(?:\\`|[^`])*`)/g, '<span class="hl-string">$1</span>');
-    
-    // 3. Keywords
-    const keywords = ['const', 'let', 'var', 'function', 'async', 'await', 'return', 'if', 'else', 'for', 'while', 'import', 'from', 'export', 'class', 'interface', 'try', 'catch', 'finally'];
-    const kwRegex = new RegExp(`\\b(${keywords.join('|')})\\b`, 'g');
-    html = html.replace(kwRegex, '<span class="hl-keyword">$1</span>');
-
-    // 4. Numbers
-    html = html.replace(/\b(\d+)\b/g, '<span class="hl-number">$1</span>');
-
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+    try {
+      const highlighted = hljs.highlightAuto(code).value;
+      const cleanHtml = DOMPurify.sanitize(highlighted);
+      return this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
+    } catch (e) {
+      // Fallback if highlight fails
+      const cleanHtml = DOMPurify.sanitize(code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+      return this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
+    }
   }
 }
 

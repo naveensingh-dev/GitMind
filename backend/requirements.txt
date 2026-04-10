@@ -9,3 +9,5 @@ google-generativeai
 pydantic
 python-dotenv
 httpx
+tenacity
+langgraph-checkpoint-sqlite

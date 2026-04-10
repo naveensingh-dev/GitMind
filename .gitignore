@@ -22,3 +22,5 @@ backend/uvicorn.log
 
 # OS
 .DS_Store
+backend/gitmind_state.db
+backend/test*.py

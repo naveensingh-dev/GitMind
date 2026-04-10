@@ -15,7 +15,7 @@ app = FastAPI(title="GitMind API")
 # Enable CORS for Angular
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:4200"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,15 +38,33 @@ async def fetch_github_diff(url: str):
     
     raise HTTPException(status_code=404, detail="Failed to fetch diff. Ensure the URL is public and valid.")
 
-def parse_github_pr_url(url: str):
-    """Parses owner, repo, and pull_number from a GitHub PR URL."""
-    match = re.search(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)", url)
-    if not match:
-        return None, None, None
-    return match.groups()
+def parse_github_url(url: str):
+    """
+    Extracts owner, repo, and identifier (pull number or commit SHA) from a GitHub URL.
+    Supports both Pull Request URLs and individual Commit URLs.
+    
+    Returns:
+        tuple: (owner, repo, pull_number, commit_sha)
+    """
+    # Pattern for Pull Requests: github.com/owner/repo/pull/number
+    pr_match = re.search(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)", url)
+    if pr_match:
+        owner, repo, pull_number = pr_match.groups()
+        return owner, repo, pull_number, None
+    
+    # Pattern for Commits: github.com/owner/repo/commit/sha
+    commit_match = re.search(r"github\.com/([^/]+)/([^/]+)/commit/([a-f0-9]+)", url)
+    if commit_match:
+        owner, repo, commit_sha = commit_match.groups()
+        return owner, repo, None, commit_sha
+        
+    return None, None, None, None
 
 async def get_latest_commit_sha(owner: str, repo: str, pull_number: str, token: str):
-    """Fetches the latest commit SHA for a PR."""
+    """
+    Queries the GitHub API to find the latest (head) commit SHA for a specific Pull Request.
+    This is required for posting comments to the correct version of the code.
+    """
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}"
     headers = {
         "Authorization": f"token {token}",
@@ -59,12 +77,22 @@ async def get_latest_commit_sha(owner: str, repo: str, pull_number: str, token: 
     return None
 
 async def push_status_to_github(github_url: str, token: str, state: str, description: str, target_url: str = ""):
-    """Pushes a commit status to GitHub."""
-    owner, repo, pull_number = parse_github_pr_url(github_url)
+    """
+    Updates the GitHub 'Commit Status' for the relevant commit.
+    This provides visual feedback (checkmarks/crosses) directly on the GitHub UI.
+    
+    Args:
+        state: One of 'pending', 'success', 'error', 'failure'
+    """
+    owner, repo, pull_number, commit_sha = parse_github_url(github_url)
     if not owner:
         return
     
-    sha = await get_latest_commit_sha(owner, repo, pull_number, token)
+    # If it's a PR, we need the latest SHA; otherwise use the direct commit SHA
+    sha = commit_sha
+    if pull_number:
+        sha = await get_latest_commit_sha(owner, repo, pull_number, token)
+    
     if not sha:
         return
 
@@ -84,17 +112,23 @@ async def push_status_to_github(github_url: str, token: str, state: str, descrip
 
 @app.post("/analyze")
 async def analyze_pr(request: Request):
+    """
+    Main entry point for starting a code review analysis.
+    Streams events from the LangGraph agent back to the client using Server-Sent Events (SSE).
+    """
     try:
         data = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     
+    # Use existing thread_id for state persistence or generate a new one
     thread_id = data.get("thread_id") or str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id}}
     
     github_url = data.get("github_url")
     github_token = data.get("github_token")
 
+    # Construct the initial agent state from request parameters
     try:
         initial_state = AgentState(
             diff=data.get("diff", ""),
@@ -112,20 +146,29 @@ async def analyze_pr(request: Request):
         raise HTTPException(status_code=422, detail=f"Invalid state data: {str(e)}")
 
     async def event_generator():
+        """Generator for Server-Sent Events."""
         yield f"data: {json.dumps({'thread_id': thread_id})}\n\n"
         
+        # Post 'pending' status to GitHub if credentials provided
         if github_url and github_token:
-            await push_status_to_github(github_url, github_token, "pending", "GitMind is analyzing the PR...")
+            await push_status_to_github(github_url, github_token, "pending", "GitMind is analyzing the changes...")
 
         try:
             final_reviews = None
+            # Stream events from the LangGraph agent
             async for event in app_graph.astream(initial_state.model_dump(), config=config):
                 if not event:
                     continue
                     
+                # Skip internal LangGraph interrupt signals
+                if "__interrupt__" in event:
+                    continue
+                
+                # Extract state update from the active node
                 node_name = list(event.keys())[0]
                 state_update = event[node_name]
                 
+                # Keep track of the final review report for GitHub status update
                 if state_update.get("reviews"):
                     rev = state_update.get("reviews")
                     if isinstance(rev, dict):
@@ -143,8 +186,9 @@ async def analyze_pr(request: Request):
                 }
                 
                 yield f"data: {json.dumps(payload)}\n\n"
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.05) # Small delay for smoother UI updates
             
+            # Finalize GitHub status based on review findings
             if github_url and github_token and final_reviews:
                 high_sev = [i for cat in ['security', 'performance', 'style'] 
                            for i in getattr(final_reviews, cat) if i.severity == 'high']
@@ -159,6 +203,7 @@ async def analyze_pr(request: Request):
                 await push_status_to_github(github_url, github_token, state, desc)
 
         except Exception as e:
+            # Handle and report errors during agent execution
             if github_url and github_token:
                 await push_status_to_github(github_url, github_token, "error", f"Analysis failed: {str(e)}")
             error_payload = {"node": "error", "status": "failed", "message": str(e)}
@@ -187,6 +232,9 @@ async def provide_feedback(request: Request):
             async for event in app_graph.astream(None, config=config):
                 if not event:
                     continue
+                
+                if "__interrupt__" in event:
+                    continue
                     
                 node_name = list(event.keys())[0]
                 state_update = event[node_name]
@@ -210,29 +258,41 @@ async def provide_feedback(request: Request):
 
 @app.post("/push-to-github")
 async def push_to_github(req: GithubCommentRequest):
-    owner, repo, pull_number = parse_github_pr_url(req.github_url)
+    owner, repo, pull_number, commit_sha = parse_github_url(req.github_url)
     if not owner:
-        raise HTTPException(status_code=400, detail="Invalid GitHub PR URL")
+        raise HTTPException(status_code=400, detail="Invalid GitHub URL. Must be a PR or Commit URL.")
     
-    commit_sha = await get_latest_commit_sha(owner, repo, pull_number, req.github_token)
-    if not commit_sha:
-        raise HTTPException(status_code=400, detail="Failed to fetch latest commit SHA from GitHub")
+    sha = commit_sha
+    if pull_number:
+        sha = await get_latest_commit_sha(owner, repo, pull_number, req.github_token)
+    
+    if not sha:
+        raise HTTPException(status_code=400, detail="Failed to fetch commit SHA from GitHub")
 
     # Use GitHub "Suggested Change" format
     comment_body = f"**GitMind Suggestion:** {req.item.issue}\n\n```suggestion\n{req.item.fix}\n```"
     
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/comments"
+    if pull_number:
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/comments"
+        payload = {
+            "body": comment_body,
+            "commit_id": sha,
+            "path": req.item.file_path,
+            "line": req.item.line_number,
+            "side": "RIGHT"
+        }
+    else:
+        # Commit comment (generic)
+        url = f"https://api.github.com/repos/{owner}/{repo}/commits/{sha}/comments"
+        payload = {
+            "body": comment_body,
+            "path": req.item.file_path,
+            "line": req.item.line_number
+        }
+
     headers = {
         "Authorization": f"token {req.github_token}",
         "Accept": "application/vnd.github.v3+json"
-    }
-    
-    payload = {
-        "body": comment_body,
-        "commit_id": commit_sha,
-        "path": req.item.file_path,
-        "line": req.item.line_number,
-        "side": "RIGHT"
     }
 
     async with httpx.AsyncClient() as client:
@@ -246,4 +306,4 @@ async def push_to_github(req: GithubCommentRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
