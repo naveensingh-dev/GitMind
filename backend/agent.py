@@ -1,16 +1,15 @@
 """
-GitMind Agent Logic - Core Orchestration
+GitMind Agent Logic - Core Orchestration (Phase 2: GitHub Integration)
 This file defines the LangGraph state machine and LLM interaction logic.
-It uses a Self-Critique & Refinement loop to ensure high-quality code reviews.
+It uses a Dual-Pass Review → Arbitration → Self-Critique → Refinement pipeline
+with repo-aware configuration and PR context enrichment.
 """
 
 import os
 import httpx
 import asyncio
-import sqlite3
 from typing import Dict, TypedDict, List, Optional
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -20,7 +19,17 @@ from tenacity import retry, wait_exponential, stop_after_attempt
 
 # Internal schema and prompt imports
 from schemas import ReviewReport, CritiqueResult, AgentState
-from prompts import REVIEWER_SYSTEM_PROMPT, CRITIQUE_SYSTEM_PROMPT, REFINEMENT_SYSTEM_PROMPT
+from prompts import (
+    REVIEWER_SYSTEM_PROMPT,
+    SECURITY_REVIEWER_PROMPT,
+    QUALITY_REVIEWER_PROMPT,
+    ARBITRATOR_PROMPT,
+    CRITIQUE_SYSTEM_PROMPT,
+    REFINEMENT_SYSTEM_PROMPT,
+)
+from diff_parser import build_review_context
+from config_loader import fetch_gitmind_config, filter_review_by_config
+from github_context import fetch_pr_comments
 
 # Load environment variables from .env
 load_dotenv()
@@ -114,11 +123,14 @@ async def invoke_llm(structured_class, state: AgentState, messages: List):
 
 async def input_parse_node(state: AgentState):
     """
-    Initial node: Validates input and fetches the PR diff if needed.
+    Initial node: Validates input, fetches the PR diff if needed,
+    loads .gitmind.yaml config, fetches PR comments, and applies smart diff chunking.
     """
     print("Node: input_parse_node")
     url = state.github_url
     diff = state.diff
+    monologue = []
+    updates = {}
     
     if url and not diff:
         diff = await fetch_github_diff_text(url)
@@ -129,38 +141,186 @@ async def input_parse_node(state: AgentState):
             "monologue": ["✗ Failed to retrieve code diff. Please check the URL or paste it manually."]
         }
 
-    return {
-        "diff": diff, 
-        "status": "input_parsed",
-        "monologue": ["✓ Successfully retrieved code diff from source."]
-    }
+    # Phase 2: Fetch .gitmind.yaml from the repo
+    if url:
+        try:
+            config = await fetch_gitmind_config(url, state.api_key)
+            if config:
+                updates["repo_config"] = config.model_dump()
+                updates["ignore_paths"] = config.ignore_paths
+                updates["severity_threshold"] = config.severity_threshold
+                updates["custom_instructions"] = config.custom_instructions
+                # Override model/provider if config specifies them and user didn't set manually
+                if config.provider:
+                    updates["selected_provider"] = config.provider
+                if config.model:
+                    updates["selected_model"] = config.model
+                monologue.append(f"📋 Loaded .gitmind.yaml config from repo (threshold: {config.severity_threshold}, ignoring {len(config.ignore_paths)} path pattern(s)).")
+            else:
+                monologue.append("ℹ️ No .gitmind.yaml found — using default settings.")
+        except Exception as e:
+            monologue.append(f"⚠️ Could not fetch .gitmind.yaml: {str(e)[:60]}")
+    
+    # Phase 2: Fetch existing PR comments for context
+    if url:
+        try:
+            pr_context = await fetch_pr_comments(url)
+            if pr_context:
+                updates["pr_context"] = pr_context
+                comment_count = pr_context.count("•")
+                monologue.append(f"💬 Loaded {comment_count} existing PR comment(s) as review context.")
+        except Exception as e:
+            monologue.append(f"⚠️ Could not fetch PR comments: {str(e)[:60]}")
 
-async def initial_review_node(state: AgentState):
+    # Apply smart diff chunking — structures raw diff with metadata headers
+    structured_diff = build_review_context(diff)
+    monologue.append("✓ Successfully retrieved and structured code diff from source.")
+
+    updates.update({
+        "diff": structured_diff, 
+        "status": "input_parsed",
+        "monologue": monologue,
+    })
+    return updates
+
+
+async def dual_review_node(state: AgentState):
     """
-    Reviewer node: Performs the first-pass analysis focusing on Security, Performance, and Style.
+    Dual-Pass Review Node: Runs two independent, concurrent review passes.
+    Pass 1 — Security-focused (paranoid auditor perspective)
+    Pass 2 — Quality-focused (performance engineer perspective)
+    Both run in parallel via asyncio.gather for speed.
     """
-    print("Node: initial_review_node")
+    print("Node: dual_review_node")
     if not state.diff: 
         return {"status": "failed", "monologue": ["✗ No diff found to review."]}
     
-    prompt = f"{REVIEWER_SYSTEM_PROMPT}\nAnalyze the following categories: Security, Performance, Style."
+    diff_content = state.diff
+    
+    # Build enriched prompts with config + PR context
+    extra_context = ""
+    if state.custom_instructions:
+        extra_context += f"\n\nPROJECT-SPECIFIC INSTRUCTIONS FROM .gitmind.yaml:\n{state.custom_instructions}\n"
+    if state.pr_context:
+        extra_context += f"\n\n{state.pr_context}\n"
+    
+    # Build messages for each pass
+    security_messages = [
+        SystemMessage(content=SECURITY_REVIEWER_PROMPT + extra_context),
+        HumanMessage(content=f"Review this PR diff for security vulnerabilities ONLY:\n\n{diff_content}")
+    ]
+    
+    quality_messages = [
+        SystemMessage(content=QUALITY_REVIEWER_PROMPT + extra_context),
+        HumanMessage(content=f"Review this PR diff for performance, quality, and style issues ONLY:\n\n{diff_content}")
+    ]
+    
+    monologue = []
+    
+    # Run both passes concurrently
+    try:
+        monologue.append("🔍 Launching dual-perspective review (Security + Quality passes)...")
+        pass_1_result, pass_2_result = await asyncio.gather(
+            invoke_llm(ReviewReport, state, security_messages),
+            invoke_llm(ReviewReport, state, quality_messages),
+        )
+        
+        review_1, model_1 = pass_1_result
+        review_2, model_2 = pass_2_result
+        
+        sec_count = len(review_1.security) + len(review_1.performance) + len(review_1.style)
+        qual_count = len(review_2.security) + len(review_2.performance) + len(review_2.style)
+        
+        monologue.append(f"🔐 Security pass completed — found {sec_count} finding(s) using {model_1}.")
+        monologue.append(f"⚡ Quality pass completed — found {qual_count} finding(s) using {model_2}.")
+        
+        return {
+            "review_pass_1": review_1,
+            "review_pass_2": review_2,
+            "selected_model": model_1,
+            "status": "dual_review_complete",
+            "monologue": monologue,
+        }
+    except Exception as e:
+        # If parallel fails (e.g., rate limit), try sequential fallback
+        monologue.append(f"⚠️ Parallel review failed ({str(e)[:60]}...), falling back to sequential...")
+        
+        try:
+            review_1, model_1 = await invoke_llm(ReviewReport, state, security_messages)
+            monologue.append(f"🔐 Security pass completed using {model_1}.")
+        except Exception as e1:
+            raise e1
+        
+        try:
+            review_2, model_2 = await invoke_llm(ReviewReport, state, quality_messages)
+            monologue.append(f"⚡ Quality pass completed using {model_2}.")
+        except Exception as e2:
+            raise e2
+        
+        return {
+            "review_pass_1": review_1,
+            "review_pass_2": review_2,
+            "selected_model": model_1,
+            "status": "dual_review_complete",
+            "monologue": monologue,
+        }
+
+
+async def arbitrate_node(state: AgentState):
+    """
+    Arbitrator Node: Merges findings from both review passes into a single
+    unified ReviewReport. Deduplicates issues, assigns cross-pass confidence
+    scores, and removes hallucinated findings.
+    """
+    print("Node: arbitrate_node")
+    
+    pass_1 = state.review_pass_1
+    pass_2 = state.review_pass_2
+    
+    if not pass_1 and not pass_2:
+        return {"status": "failed", "monologue": ["✗ No review passes available to merge."]}
+    
+    # If only one pass succeeded, use it directly
+    if not pass_1:
+        return {"reviews": pass_2, "status": "arbitrate_complete", 
+                "monologue": ["🔀 Only quality pass available — using as final review."]}
+    if not pass_2:
+        return {"reviews": pass_1, "status": "arbitrate_complete", 
+                "monologue": ["🔀 Only security pass available — using as final review."]}
+    
+    # Build context for the arbitrator LLM
+    pass_1_json = pass_1.model_dump_json()
+    pass_2_json = pass_2.model_dump_json()
+    
     messages = [
-        SystemMessage(content=prompt), 
-        HumanMessage(content=f"Review this PR diff:\n\n{state.diff}")
+        SystemMessage(content=ARBITRATOR_PROMPT),
+        HumanMessage(content=(
+            f"=== SECURITY PASS RESULTS ===\n{pass_1_json}\n\n"
+            f"=== QUALITY PASS RESULTS ===\n{pass_2_json}\n\n"
+            f"=== ORIGINAL DIFF ===\n{state.diff}\n\n"
+            f"Merge these two passes into a single unified ReviewReport. "
+            f"Deduplicate overlapping findings and assign confidence scores."
+        ))
     ]
     
     response, used_model = await invoke_llm(ReviewReport, state, messages)
     
+    # Count merged stats
+    total = len(response.security) + len(response.performance) + len(response.style)
+    
     return {
         "reviews": response, 
-        "selected_model": used_model,
-        "status": "review_complete",
-        "monologue": [f"🔍 Initial review completed using {used_model}."]
+        "status": "arbitrate_complete",
+        "monologue": [
+            f"🔀 Arbitration complete — merged into {total} unique finding(s).",
+            f"📊 Final confidence score: {response.confidence_score}%"
+        ]
     }
+
 
 async def critique_node(state: AgentState):
     """
-    Critic node: Evaluates the initial review for quality, accuracy, and constructiveness.
+    Critic node: Evaluates the arbitrated review for quality, accuracy, and constructiveness.
     """
     print("Node: critique_node")
     if not state.self_critique: 
@@ -226,17 +386,19 @@ def should_refine(state: AgentState):
 
 workflow = StateGraph(AgentState)
 
-# Define the nodes in our graph
+# Define the nodes in our graph (Phase 1: Dual-Pass + Arbitrator)
 workflow.add_node("input", input_parse_node)
-workflow.add_node("review", initial_review_node)
+workflow.add_node("dual_review", dual_review_node)
+workflow.add_node("arbitrate", arbitrate_node)
 workflow.add_node("critique", critique_node)
 workflow.add_node("human_review", human_review_node)
 workflow.add_node("refine", refinement_node)
 
-# Connect the nodes
+# Connect the nodes: input → dual_review → arbitrate → critique → human_review
 workflow.set_entry_point("input")
-workflow.add_edge("input", "review")
-workflow.add_edge("review", "critique")
+workflow.add_edge("input", "dual_review")
+workflow.add_edge("dual_review", "arbitrate")
+workflow.add_edge("arbitrate", "critique")
 workflow.add_edge("critique", "human_review")
 
 # Add loop logic with conditional edges
@@ -247,11 +409,9 @@ workflow.add_conditional_edges(
 )
 workflow.add_edge("refine", "critique")
 
-# Initialize persistence with SQLite
-# This allows the agent to remember state across API restarts/crashes
-db_path = "gitmind_state.db"
-conn = sqlite3.connect(db_path, check_same_thread=False)
-memory = SqliteSaver(conn)
+# Initialize persistence
+from langgraph.checkpoint.memory import MemorySaver
+memory = MemorySaver()
 
 # Compile the graph into an executable application
 # We interrupt_before human_review to enable human feedback via the UI

@@ -19,6 +19,8 @@ interface ReviewItem {
   line_number?: number;
   line?: string;
   fix: string;
+  confidence?: number;
+  found_by?: string[];
 }
 
 interface ReviewReport {
@@ -72,6 +74,7 @@ export class App implements OnInit {
   errorMessage = signal<string | null>(null); // User-facing error messages
   successMessage = signal<string | null>(null); // User-facing success messages (e.g., after completion)
   selectedFilePath = signal<string | null>(null); // Path of the file currently selected in the tree
+  analysisHistory = signal<any[]>([]); // Past analysis history from SQLite
   
   // Human-in-the-loop signals
   threadId = signal<string | null>(null); // LangGraph thread ID for session persistence
@@ -161,9 +164,9 @@ export class App implements OnInit {
 
   currentModelOptions = computed(() => this.modelOptions[this.selectedProvider()]);
 
-  // Pipeline Execution States
+  // Pipeline Execution States (Phase 1: 7-node pipeline)
   nodeStates = signal<Record<string, string>>({
-    input: '', review: '', critique: '', human_review: '', refine: '', output: ''
+    input: '', dual_review: '', arbitrate: '', critique: '', human_review: '', refine: '', output: ''
   });
 
   // Analysis Configuration
@@ -242,6 +245,7 @@ export class App implements OnInit {
   ngOnInit() {
     this.appendLog('info', 'GitMind agent initialized. Awaiting input...');
     this.loadSettings();
+    this.loadHistory();
   }
 
   // --- DATA PERSISTENCE ---
@@ -268,6 +272,31 @@ export class App implements OnInit {
       localStorage.setItem('gitmind_github_token', this.githubToken());
       this.appendLog('success', '✓ Agent settings and PAT saved.');
     }
+  }
+
+  // --- HISTORY ---
+
+  loadHistory() {
+    this.apiService.getHistory().subscribe({
+      next: (data) => this.analysisHistory.set(data || []),
+      error: () => {} // Silently fail — history is non-critical
+    });
+  }
+
+  loadPastAnalysis(item: any) {
+    if (item.github_url) {
+      this.prUrl.set(item.github_url);
+    }
+    this.apiService.getAnalysis(item.id).subscribe({
+      next: (data) => {
+        if (data?.review_data) {
+          this.analysisData.set(data.review_data);
+          this.currentTab.set('security');
+          this.appendLog('info', `📂 Loaded past analysis from ${new Date(data.created_at).toLocaleDateString()}`);
+        }
+      },
+      error: (err) => this.appendLog('error', 'Failed to load past analysis.')
+    });
   }
 
   // --- EVENT HANDLERS ---
@@ -319,7 +348,7 @@ export class App implements OnInit {
     this.threadId.set(null);
     this.startTime = Date.now();
     
-    ['input', 'review', 'critique', 'human_review', 'refine', 'output'].forEach(n => this.setNode(n, ''));
+    ['input', 'dual_review', 'arbitrate', 'critique', 'human_review', 'refine', 'output'].forEach(n => this.setNode(n, ''));
     this.setNode('input', 'active');
 
     this.appendLog('info', `▶ Starting analysis using ${this.selectedModel().toUpperCase()}...`);
@@ -392,9 +421,10 @@ export class App implements OnInit {
     }
 
     if (node === 'input') this.setNode('input', 'active');
-    else if (node === 'review') { this.setNode('input', 'done'); this.setNode('review', 'active'); }
+    else if (node === 'dual_review') { this.setNode('input', 'done'); this.setNode('dual_review', 'active'); }
+    else if (node === 'arbitrate') { this.setNode('dual_review', 'done'); this.setNode('arbitrate', 'active'); }
     else if (node === 'critique') { 
-      this.setNode('review', 'done'); 
+      this.setNode('arbitrate', 'done'); 
       this.setNode('critique', 'active'); 
       if (critique) this.critiqueData.set(critique);
     }
@@ -414,6 +444,7 @@ export class App implements OnInit {
       this.successMessage.set('The code review analysis has completed successfully. Your report is ready!');
       this.isAwaitingFeedback.set(false);
       this.isAnalyzing.set(false);
+      this.loadHistory(); // Refresh history list
     }
   }
 
@@ -435,9 +466,14 @@ export class App implements OnInit {
       return "Permission Denied: Ensure you have the required access rights for this model, and your GitHub PAT has the correct read scopes for the linked repository.";
     }
 
+    // Check for model not found / deprecated
+    if (msg.includes('404') || msg.includes('not_found') || msg.includes('not found') || msg.includes('is not supported')) {
+      return "Model Not Found: The selected model is unavailable or has been deprecated by the provider. Please switch to a different model in the Agent Controls panel (e.g., Gemini 2.5 Flash or GPT-4o).";
+    }
+
     // Check for model context capacity exceeded
     if (msg.includes('context') || msg.includes('too many tokens') || msg.includes('maximum context length')) {
-      return "Context Limit Exceeded: This Pull Request is too large for the selected model. Try using a model with a larger context window (like Gemini 1.5 Pro or Claude 3.5).";
+      return "Context Limit Exceeded: This Pull Request is too large for the selected model. Try using a model with a larger context window (like Gemini 2.5 Pro or Claude 3.5).";
     }
 
     return "An unexpected error occurred during processing: " + rawMessage;

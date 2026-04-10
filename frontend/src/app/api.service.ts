@@ -35,6 +35,16 @@ export class ApiService {
     });
   }
 
+  getHistory(repo?: string): Observable<any[]> {
+    const params: any = {};
+    if (repo) params.repo = repo;
+    return this.http.get<any[]>(`${this.baseUrl}/history`, { params });
+  }
+
+  getAnalysis(id: number): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/history/${id}`);
+  }
+
   private createSseObservable(url: string, payload: any): Observable<string> {
     return new Observable(observer => {
       const abortController = new AbortController();

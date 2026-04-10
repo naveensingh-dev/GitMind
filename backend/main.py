@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from agent import app_graph, fetch_github_diff_text
 from schemas import AgentState, ReviewItem, ReviewReport
 from pydantic import BaseModel
+from history import save_analysis, get_history, get_analysis_by_id
 
 app = FastAPI(title="GitMind API")
 
@@ -201,6 +202,18 @@ async def analyze_pr(request: Request):
                     state = "failure"
                 
                 await push_status_to_github(github_url, github_token, state, desc)
+            
+            # Phase 2: Auto-save analysis to history
+            if final_reviews and github_url:
+                try:
+                    save_analysis(
+                        github_url=github_url,
+                        model=initial_state.selected_model,
+                        provider=initial_state.selected_provider,
+                        review_report=final_reviews.model_dump(),
+                    )
+                except Exception as e:
+                    print(f"DEBUG: Failed to save analysis history: {e}")
 
         except Exception as e:
             # Handle and report errors during agent execution
@@ -303,6 +316,19 @@ async def push_to_github(req: GithubCommentRequest):
         else:
             error_detail = response.json()
             raise HTTPException(status_code=response.status_code, detail=f"GitHub API Error: {error_detail}")
+
+@app.get("/history")
+async def analysis_history(repo: str = None, limit: int = 20):
+    """Returns past analysis history, optionally filtered by repo."""
+    return get_history(repo=repo, limit=limit)
+
+@app.get("/history/{analysis_id}")
+async def analysis_detail(analysis_id: int):
+    """Returns a specific analysis including the full review data."""
+    result = get_analysis_by_id(analysis_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return result
 
 if __name__ == "__main__":
     import uvicorn

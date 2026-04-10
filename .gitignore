@@ -24,3 +24,4 @@ backend/uvicorn.log
 .DS_Store
 backend/gitmind_state.db
 backend/test*.py
+backend/*.db
