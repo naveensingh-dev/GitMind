@@ -71,6 +71,12 @@ export class App implements OnInit {
   dashboardMetrics = this.state.dashboardMetrics;
   tabLoading = this.state.tabLoading;
 
+  isLeftPanelCollapsed = signal(false);
+
+  toggleLeftPanel() {
+    this.isLeftPanelCollapsed.set(!this.isLeftPanelCollapsed());
+  }
+
   // Human-in-the-loop signals
   threadId = this.state.threadId;
   isAwaitingFeedback = this.state.isAwaitingFeedback;
@@ -364,8 +370,11 @@ export class App implements OnInit {
   }
 
   loadExample() {
+    // Reset state before loading so tabs reflect a fresh start
+    this.resetForNewPR();
     this.diffInput.set(EXAMPLE_DIFF);
     this.prUrl.set('https://github.com/example/webapp/pull/142');
+    this.currentTab.set('diff');
     this.appendLog('info', 'Example PR diff loaded: webapp/pull/142');
   }
 
@@ -587,6 +596,27 @@ export class App implements OnInit {
   }
 
 
+  /**
+   * Resets all PR-specific analysis state when a new PR is loaded.
+   * This ensures the tabs rail only shows History → Diff → Review progressively.
+   */
+  resetForNewPR() {
+    this.diffInput.set('');
+    this.analysisData.set(null);
+    this.critiqueData.set(null);
+    this.autoFixes.set(null);
+    this.generatedTests.set(null);
+    this.archReview.set(null);
+    this.selectedFilePath.set(null);
+    this.isAnalyzing.set(false);
+    this.isAwaitingFeedback.set(false);
+    this.threadId.set(null);
+    this.refinementCount.set(0);
+    this.nodeStates.set({ input: '', multi_review: '', arbitrate: '', critique: '', human_review: '', refine: '', output: '' });
+    // Route back to history if exists, otherwise clear tab
+    this.currentTab.set(this.analysisHistory().length ? 'history' : 'diff');
+  }
+
   fetchPrDiff() {
     const url = this.prUrl().trim();
     if (!url) {
@@ -594,6 +624,8 @@ export class App implements OnInit {
       return;
     }
 
+    // Reset all previous analysis state so tabs reset cleanly
+    this.resetForNewPR();
     this.appendLog('info', `▶ Fetching diff from GitHub...`);
 
     this.apiService.fetchDiff(url).subscribe({

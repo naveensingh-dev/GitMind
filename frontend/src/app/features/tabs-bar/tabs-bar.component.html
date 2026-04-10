@@ -1,13 +1,1 @@
-<div class="tabs-bar" *ngIf="!isAnalyzing || analysisData || analysisHistory?.length">
-  <div class="tab" [class.active]="currentTab === 'history'" (click)="switchTabAction.emit('history')" *ngIf="analysisHistory?.length">📂 History</div>
-  <div class="tab" [class.active]="currentTab === 'diff'" (click)="switchTabAction.emit('diff')" *ngIf="diffInput">🔍 Diff</div>
-  <div class="tab" [class.active]="currentTab === 'analytics'" (click)="switchTabAction.emit('analytics')" *ngIf="dashboardMetrics">📊 Analytics</div>
-  <div class="tab" [class.active]="currentTab === 'summary'" (click)="switchTabAction.emit('summary')" *ngIf="analysisData">📋 Summary</div>
-  <div class="tab" [class.active]="currentTab === 'security'" (click)="switchTabAction.emit('security')" *ngIf="analysisData">🔐 Security</div>
-  <div class="tab" [class.active]="currentTab === 'performance'" (click)="switchTabAction.emit('performance')" *ngIf="analysisData">⚡ Performance</div>
-  <div class="tab" [class.active]="currentTab === 'style'" (click)="switchTabAction.emit('style')" *ngIf="analysisData">🎨 Style</div>
-  <div class="tab" [class.active]="currentTab === 'autofix'" (click)="switchTabAction.emit('autofix')" *ngIf="autoFixes">🔧 Auto-Fix</div>
-  <div class="tab" [class.active]="currentTab === 'tests'" (click)="switchTabAction.emit('tests')" *ngIf="generatedTests">🧪 Tests</div>
-  <div class="tab" [class.active]="currentTab === 'arch'" (click)="switchTabAction.emit('arch')" *ngIf="archReview">🏗️ Arch</div>
-  <div class="tab" [class.active]="currentTab === 'report'" (click)="switchTabAction.emit('report')" *ngIf="analysisData">📄 Raw Report</div>
-</div>
+<!-- Command-bar tab groups are all rendered inside the component's template now -->

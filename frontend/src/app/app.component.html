@@ -9,7 +9,7 @@
 </app-overlays>
 
 <!-- APP -->
-<div class="app" [class.no-sidebar]="!diffInput()">
+<div class="app" [class.no-sidebar]="!diffInput()" [class.left-panel-collapsed]="isLeftPanelCollapsed()">
   <app-sidebar-layout
     *ngIf="diffInput()"
     [diffInput]="diffInput()"
@@ -19,7 +19,14 @@
   </app-sidebar-layout>
 
   <!-- LEFT PANEL -->
-  <div class="left-panel">
+  <div class="left-panel" [class.collapsed]="isLeftPanelCollapsed()">
+    <div class="collapse-toggle" (click)="toggleLeftPanel()" title="Toggle Agent Panel">
+      <svg *ngIf="!isLeftPanelCollapsed()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      <svg *ngIf="isLeftPanelCollapsed()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </div>
+
+    <!-- Content Wrapper for collapsing -->
+    <div class="left-panel-content">
     <app-agent-controls
       [prUrl]="prUrl()"
       [diffInput]="diffInput()"
@@ -59,6 +66,12 @@
 
     <!-- LOG -->
     <app-activity-log [logs]="logs()"></app-activity-log>
+    </div> <!-- /left-panel-content -->
+
+    <!-- Collapsed state representation -->
+    <div class="left-panel-collapsed-view" *ngIf="isLeftPanelCollapsed()">
+      <span class="vertical-text">AGENT CONTROLS</span>
+    </div>
   </div>
 
   <!-- RIGHT PANEL -->
@@ -82,93 +95,140 @@
         
         <app-thinking-logs [isAnalyzing]="isAnalyzing()" [logs]="logs()"></app-thinking-logs>
 
-        <app-tabs-bar
-          *ngIf="!isAnalyzing() || analysisData()"
-          [currentTab]="currentTab()"
-          [diffInput]="diffInput()"
-          [isAnalyzing]="isAnalyzing()"
-          [analysisHistory]="analysisHistory()"
-          [analysisData]="analysisData()"
-          [dashboardMetrics]="dashboardMetrics()"
-          [autoFixes]="autoFixes()"
-          [generatedTests]="generatedTests()"
-          [archReview]="archReview()"
-          (switchTabAction)="switchTab($event)">
-        </app-tabs-bar>
+        <!-- Horizontal: icon rail left + content right -->
+        <div class="rail-layout" *ngIf="!isAnalyzing() || analysisData()">
+          <app-tabs-bar
+            [currentTab]="currentTab()"
+            [diffInput]="diffInput()"
+            [isAnalyzing]="isAnalyzing()"
+            [analysisHistory]="analysisHistory()"
+            [analysisData]="analysisData()"
+            [dashboardMetrics]="dashboardMetrics()"
+            [autoFixes]="autoFixes()"
+            [generatedTests]="generatedTests()"
+            [archReview]="archReview()"
+            (switchTabAction)="switchTab($event)">
+          </app-tabs-bar>
 
-        <div class="tab-panels">
-          <!-- Skeleton loader shown during tab transitions -->
-          <div class="tab-skeleton" *ngIf="tabLoading()">
-            <div class="skeleton-pulse"></div>
-            <div class="skeleton-pulse short"></div>
-            <div class="skeleton-pulse"></div>
-            <div class="skeleton-pulse medium"></div>
-          </div>
+          <div class="tab-panels">
+            <!-- Skeleton loader shown during tab transitions -->
+            <div class="tab-skeleton" *ngIf="tabLoading()">
+              <div class="skeleton-pulse"></div>
+              <div class="skeleton-pulse short"></div>
+              <div class="skeleton-pulse"></div>
+              <div class="skeleton-pulse medium"></div>
+            </div>
 
           <!-- Analytics Dashboard Tab -->
-          <div class="tab-panel active" *ngIf="currentTab() === 'analytics' && dashboardMetrics()">
-            <app-analytics-dashboard [metrics]="dashboardMetrics()!"></app-analytics-dashboard>
+          <div class="tab-panel active" *ngIf="currentTab() === 'analytics'">
+            <app-analytics-dashboard *ngIf="dashboardMetrics()" [metrics]="dashboardMetrics()!"></app-analytics-dashboard>
+            <div class="empty-state" *ngIf="!dashboardMetrics()">
+              <div class="empty-icon">📊</div>
+              <div class="empty-text">No analytics data available.</div>
+            </div>
           </div>
 
 
           <!-- History Tab -->
           <div class="tab-panel active" *ngIf="currentTab() === 'history'">
-            <app-analysis-history 
+            <app-analysis-history *ngIf="analysisHistory().length"
               [analysisHistory]="analysisHistory()" 
               (loadPastAnalysisAction)="loadPastAnalysis($event)">
             </app-analysis-history>
+            <div class="empty-state" *ngIf="!analysisHistory().length">
+              <div class="empty-icon">📂</div>
+              <div class="empty-text">No history found. Try running an analysis first!</div>
+            </div>
           </div>
 
           <!-- Diff Tab — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'diff'">
-            <app-diff-viewer [files]="parsedFiles()"></app-diff-viewer>
+            <app-diff-viewer *ngIf="diffInput()" [files]="parsedFiles()"></app-diff-viewer>
+            <div class="empty-state" *ngIf="!diffInput()">
+              <div class="empty-icon">🔍</div>
+              <div class="empty-text">No diff loaded. Fetch a pull request to see changes.</div>
+            </div>
           </div>
 
           <!-- Summary Tab — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'summary'">
-            <app-summary-tab [analysisData]="analysisData()" [critiqueData]="critiqueData()"></app-summary-tab>
+            <app-summary-tab *ngIf="analysisData()" [analysisData]="analysisData()" [critiqueData]="critiqueData()"></app-summary-tab>
+            <div class="empty-state" *ngIf="!analysisData()">
+              <div class="empty-icon">📋</div>
+              <div class="empty-text">No summary data available. Run an analysis.</div>
+            </div>
           </div>
           
           <!-- Category Panels — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'security'">
-            <app-review-panel [items]="analysisData()?.security || []" [categoryName]="'Security'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <app-review-panel *ngIf="analysisData()?.security?.length" [items]="analysisData()?.security || []" [categoryName]="'Security'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <div class="empty-state" *ngIf="!analysisData()?.security?.length">
+              <div class="empty-icon">🛡️</div>
+              <div class="empty-text">No security issues detected!</div>
+            </div>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'performance'">
-            <app-review-panel [items]="analysisData()?.performance || []" [categoryName]="'Performance'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <app-review-panel *ngIf="analysisData()?.performance?.length" [items]="analysisData()?.performance || []" [categoryName]="'Performance'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <div class="empty-state" *ngIf="!analysisData()?.performance?.length">
+              <div class="empty-icon">⚡</div>
+              <div class="empty-text">No performance issues detected!</div>
+            </div>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'style'">
-            <app-review-panel [items]="analysisData()?.style || []" [categoryName]="'Style'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <app-review-panel *ngIf="analysisData()?.style?.length" [items]="analysisData()?.style || []" [categoryName]="'Style'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <div class="empty-state" *ngIf="!analysisData()?.style?.length">
+              <div class="empty-icon">✨</div>
+              <div class="empty-text">No code style issues found!</div>
+            </div>
           </div>
 
-          <!-- Auto Fix Tab — Extracted Component -->
+          <!-- Auto Fix Tab -->
           <div class="tab-panel active" *ngIf="currentTab() === 'autofix'">
-            <app-autofix-panel 
+            <app-autofix-panel *ngIf="autoFixes()"
               [autoFixes]="autoFixes()" 
               [applyingFixFor]="applyingFixFor()" 
               (applyFixSelected)="applyFix($event)">
             </app-autofix-panel>
+            <div class="empty-state" *ngIf="!autoFixes()">
+              <div class="empty-icon">🔧</div>
+              <div class="empty-text">No auto-fixes generated for this analysis.</div>
+            </div>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'tests'">
-            <app-tests-panel [generatedTests]="generatedTests()"></app-tests-panel>
+            <app-tests-panel *ngIf="generatedTests()" [generatedTests]="generatedTests()"></app-tests-panel>
+            <div class="empty-state" *ngIf="!generatedTests()">
+              <div class="empty-icon">🧪</div>
+              <div class="empty-text">No unit tests were generated.</div>
+            </div>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'arch'">
-            <app-arch-tab [archReview]="archReview()"></app-arch-tab>
+            <app-arch-tab *ngIf="archReview()" [archReview]="archReview()"></app-arch-tab>
+            <div class="empty-state" *ngIf="!archReview()">
+              <div class="empty-icon">🏗️</div>
+              <div class="empty-text">No architectural review provided.</div>
+            </div>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'report'">
-            <app-raw-report-tab
+            <app-raw-report-tab *ngIf="analysisData()"
               [analysisData]="analysisData()"
               [selectedModel]="selectedModel()"
               [renderedReport]="renderedReport()"
               (copyReportAction)="copyReport()">
             </app-raw-report-tab>
+            <div class="empty-state" *ngIf="!analysisData()">
+              <div class="empty-icon">📄</div>
+              <div class="empty-text">No raw report available yet.</div>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+          </div><!-- /tab-panels -->
+        </div><!-- /rail-layout -->
+      </div><!-- /results-content -->
+    </div><!-- /results-area -->
+  </div><!-- /right-panel -->
+</div><!-- /app -->
+
