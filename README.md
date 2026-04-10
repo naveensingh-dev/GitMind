@@ -21,7 +21,7 @@ Most AI-driven tools suffer from "one-shot" hallucinations. GitMind eliminates t
 - **✋ Human-in-the-Loop (HITL):** Built-in interruption points allow developers to steer the agent mid-process.
 - **💾 Stateful Persistence:** Leverages `SqliteSaver` to persist entire execution threads, enabling long-running review sessions.
 - **🚀 Live Streaming:** High-concurrency FastAPI backend streams internal monologue and node transitions via SSE.
-- **🛠 GitHub Native Integration:** Post-review actions include automated GitHub "Suggested Change" comments.
+- **🛠 GitHub Native Integration:** Post-review actions include automated GitHub **Suggested Change** comments for both **Pull Requests** and **Individual Commits**.
 
 ---
 
@@ -47,7 +47,7 @@ graph TD
 ```
 
 ### The Cognitive Stages:
-1.  **Input Parse:** Tokenizes PR diffs and fetches remote source code.
+1.  **Input Parse:** Tokenizes diffs and fetches remote source code from PRs or Commits.
 2.  **Initial Review:** Broad-spectrum analysis of **Security**, **Performance**, and **Style**.
 3.  **AI Critique:** A dedicated "Critic" agent checks the review for hallucinations and tone.
 4.  **Human Interruption:** The graph pauses, persisting its state to SQLite, and waits for `human_feedback`.
@@ -62,9 +62,9 @@ graph TD
 | **Multi-Provider Core** | Seamlessly switch between **Gemini 2.0**, **GPT-4o**, **Claude 3.7**, and **DeepSeek**. |
 | **Stateful Memory** | `SqliteSaver` checkpointer ensures session persistence across restarts. |
 | **Reactive UI** | Built with **Angular 20 Signals** for zero-latency, zoneless DOM updates. |
-| **SSE Streaming** | Server-Sent Events provide real-time visibility into the agent's internal monologue. |
-| **GitHub Integration** | Automated line-level comments using the GitHub REST API. |
-| **Structured Output** | Enforces 100% JSON schema compliance using Pydantic validation. |
+| **High-Fidelity Reports** | Enhanced markdown rendering with **Highlight.js**, **DOMPurify**, and interactive metadata badges. |
+| **GitHub Integration** | Support for posting comments to both Pull Requests and individual Commits. |
+| **Robust Error Handling** | Sophisticated UI feedback for API quotas, auth failures, and context limits. |
 
 ---
 
@@ -77,7 +77,7 @@ GitMind is highly configurable via environment variables in `backend/.env`.
 | `GOOGLE_API_KEY` | Your Google Gemini API Key | - |
 | `ANTHROPIC_API_KEY`| Your Anthropic API Key | - |
 | `OPENAI_API_KEY` | Your OpenAI API Key | - |
-| `GITHUB_TOKEN` | Personal Access Token (PAT) for PR commenting | - |
+| `GITHUB_TOKEN` | Personal Access Token (PAT) for PR/Commit commenting | - |
 | `PORT` | API Server Port | `8000` |
 
 ---
@@ -91,11 +91,11 @@ GitMind/
 │   ├── main.py             # SSE Endpoints & GitHub API Controller
 │   ├── prompts.py          # Reasoning & Refinement System Prompts
 │   ├── schemas.py          # Pydantic State & Report Definitions
-│   └── requirements.txt    # Async-optimized Python deps
+│   └── requirements.txt    # Async-optimized Python deps with Tenacity retries
 ├── frontend/               # Angular Application
 │   ├── src/app/            # Signal-based Reactive Components
-│   ├── src/styles.css      # Custom Cyberpunk Theme
-│   └── package.json        # Frontend Toolchain
+│   ├── src/styles.css      # Custom Cyberpunk Theme & Report Styling
+│   └── package.json        # Frontend Toolchain (marked, dompurify, hljs)
 └── README.md               # Documentation
 ```
 
