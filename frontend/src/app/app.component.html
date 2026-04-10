@@ -231,6 +231,9 @@
           <div class="tab" [class.active]="currentTab() === 'security'" (click)="switchTab('security')" *ngIf="analysisData()">🔐 Security</div>
           <div class="tab" [class.active]="currentTab() === 'performance'" (click)="switchTab('performance')" *ngIf="analysisData()">⚡ Performance</div>
           <div class="tab" [class.active]="currentTab() === 'style'" (click)="switchTab('style')" *ngIf="analysisData()">🎨 Style</div>
+          <div class="tab" [class.active]="currentTab() === 'autofix'" (click)="switchTab('autofix')" *ngIf="autoFixes()">🔧 Auto-Fix</div>
+          <div class="tab" [class.active]="currentTab() === 'tests'" (click)="switchTab('tests')" *ngIf="generatedTests()">🧪 Tests</div>
+          <div class="tab" [class.active]="currentTab() === 'arch'" (click)="switchTab('arch')" *ngIf="archReview()">🏗️ Arch</div>
           <div class="tab" [class.active]="currentTab() === 'report'" (click)="switchTab('report')" *ngIf="analysisData()">📄 Raw Report</div>
         </div>
 
@@ -371,6 +374,78 @@
                 <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
               </div>
             </div>
+          </div>
+
+          <div class="tab-panel active" *ngIf="currentTab() === 'autofix'">
+            <div class="summary-box" style="margin-bottom: 20px;">
+              <div class="group-title">Agent Generated Patches</div>
+              <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ autoFixes()?.summary }}</p>
+            </div>
+            <div *ngIf="autoFixes()?.fixes?.length === 0" class="placeholder-text" style="padding: 40px;">No auto-fixes generated.</div>
+            <div *ngFor="let fix of autoFixes()?.fixes" class="review-card open autofix-card">
+              <div class="review-card-header" style="justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="severity-pill" [ngClass]="'sev-' + fix.severity">{{ fix.severity }}</span>
+                  <span class="card-issue" style="font-family: var(--mono); color: var(--g);">{{ fix.file_path }}</span>
+                </div>
+                <button class="push-github-btn" 
+                        [class.danger-btn]="!fix.is_safe" 
+                        [disabled]="applyingFixFor() === fix.file_path"
+                        (click)="applyFix(fix)">
+                  {{ applyingFixFor() === fix.file_path ? 'Applying...' : (fix.is_safe ? 'One-Click Apply ↗' : 'Apply (Unsafe) ↗') }}
+                </button>
+              </div>
+              <div class="review-card-body" style="padding: 16px;">
+                <p style="margin-top: 0; color: var(--text2); font-size: 13px;">{{ fix.description }}</p>
+                <div class="diff-split-view">
+                  <div class="diff-half diff-original">
+                     <div class="diff-header">Original</div>
+                     <pre><code [innerHTML]="highlightCode(fix.original_code)"></code></pre>
+                  </div>
+                  <div class="diff-half diff-fixed">
+                     <div class="diff-header">Fixed</div>
+                     <pre><code [innerHTML]="highlightCode(fix.fixed_code)"></code></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel active" *ngIf="currentTab() === 'tests'">
+             <div class="summary-box" style="margin-bottom: 20px; border-color: rgba(0, 191, 255, 0.2);">
+                <div class="group-title" style="color: #00bfff;">Generated Unit Tests</div>
+                <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ generatedTests()?.summary }}</p>
+             </div>
+             <div *ngFor="let test of generatedTests()?.tests" class="review-card open">
+               <div class="review-card-header">
+                 <span class="card-issue" style="color: #00bfff;">{{ test.test_file_path }}</span>
+                 <span class="severity-pill" style="background: rgba(0, 191, 255, 0.15); color: #00bfff;">{{ test.test_framework }}</span>
+               </div>
+               <div class="review-card-body" style="padding: 0;">
+                 <pre style="margin: 0; background: var(--bg2); padding: 16px; border-radius: 0 0 10px 10px; overflow-x: auto;"><code [innerHTML]="highlightCode(test.test_code)"></code></pre>
+               </div>
+             </div>
+          </div>
+
+          <div class="tab-panel active" *ngIf="currentTab() === 'arch'">
+             <div class="summary-box" style="margin-bottom: 20px; border-color: rgba(255, 105, 180, 0.2);">
+                <div class="group-title" style="color: #ff69b4;">Architecture Review</div>
+                <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ archReview()?.summary }}</p>
+             </div>
+             <div class="mermaid-container" *ngIf="archReview()?.mermaid_code" style="background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; overflow-x: auto;">
+                <pre class="mermaid" style="margin: 0; color: black;">{{ archReview()?.mermaid_code }}</pre>
+             </div>
+             
+             <div class="group-title" style="margin: 20px 0 10px;">Architectural Observations</div>
+             <div *ngFor="let obs of archReview()?.observations" class="review-card open">
+                <div class="review-card-header">
+                  <span class="severity-pill" [ngClass]="'sev-' + (obs.severity === 'critical' ? 'high' : obs.severity === 'warning' ? 'medium' : 'low')">{{ obs.type }}</span>
+                  <span class="card-issue">{{ obs.description }}</span>
+                </div>
+                <div class="review-card-body" *ngIf="obs.files_involved?.length">
+                  <div class="code-block">{{ obs.files_involved.join(', ') }}</div>
+                </div>
+             </div>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'report'">

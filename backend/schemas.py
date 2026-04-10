@@ -1,5 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
+from auto_fix import AutoFixReport
+from test_gen import GeneratedTestSuite
+from arch_review import ArchReview
 
 class ReviewItem(BaseModel):
     issue: str = Field(description="Brief description of the issue found")
@@ -49,6 +52,12 @@ class AgentState(BaseModel):
     review_pass_1: Optional[ReviewReport] = None  # Security-focused pass
     review_pass_2: Optional[ReviewReport] = None  # Quality-focused pass
     reviews: Optional[ReviewReport] = None         # Arbitrated/merged final result
+    
+    # Phase 3: Capabilities Expansion
+    auto_fixes: Optional[AutoFixReport] = None
+    generated_tests: Optional[GeneratedTestSuite] = None
+    arch_review: Optional[ArchReview] = None
+
     critique: Optional[CritiqueResult] = None
     human_feedback: Optional[str] = None
     monologue: List[str] = Field(default_factory=list)

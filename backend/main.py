@@ -183,7 +183,10 @@ async def analyze_pr(request: Request):
                     "refinement_count": state_update.get("refinement_count", 0),
                     "monologue": state_update.get("monologue", []),
                     "reviews": state_update.get("reviews").model_dump() if state_update.get("reviews") else None,
-                    "critique": state_update.get("critique").model_dump() if state_update.get("critique") else None
+                    "critique": state_update.get("critique").model_dump() if state_update.get("critique") else None,
+                    "auto_fixes": state_update.get("auto_fixes").model_dump() if state_update.get("auto_fixes") else None,
+                    "generated_tests": state_update.get("generated_tests").model_dump() if state_update.get("generated_tests") else None,
+                    "arch_review": state_update.get("arch_review").model_dump() if state_update.get("arch_review") else None
                 }
                 
                 yield f"data: {json.dumps(payload)}\n\n"
@@ -316,6 +319,68 @@ async def push_to_github(req: GithubCommentRequest):
         else:
             error_detail = response.json()
             raise HTTPException(status_code=response.status_code, detail=f"GitHub API Error: {error_detail}")
+
+@app.post("/apply-fix")
+async def apply_fix(request: Request):
+    """Pushes a generated code patch to the GitHub PR branch."""
+    import base64
+    import re
+    data = await request.json()
+    github_url = data.get("github_url")
+    github_token = data.get("github_token")
+    file_path = data.get("file_path")
+    fixed_code = data.get("fixed_code")
+    commit_msg = data.get("commit_message", f"Auto-Fix: {file_path}")
+    
+    if not all([github_url, github_token, file_path, fixed_code]):
+        raise HTTPException(status_code=400, detail="Missing required parameters")
+        
+    # Match PR URL: github.com/owner/repo/pull/number
+    pr_match = re.search(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)", github_url)
+    if not pr_match:
+        raise HTTPException(status_code=400, detail="Must be a Pull Request URL")
+        
+    owner, repo, pr_number = pr_match.groups()
+    
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # 1. Get PR details to find branch name
+        pr_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+        pr_res = await client.get(pr_url, headers=headers)
+        if pr_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch PR details")
+            
+        branch = pr_res.json().get("head", {}).get("ref")
+        if not branch:
+            raise HTTPException(status_code=400, detail="Could not find PR branch")
+            
+        # 2. Get file SHA on that branch
+        file_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}?ref={branch}"
+        file_res = await client.get(file_url, headers=headers)
+        if file_res.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"File {file_path} not found on branch {branch}")
+            
+        file_sha = file_res.json().get("sha")
+        
+        # 3. Update file with commit
+        update_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
+        encoded_content = base64.b64encode(fixed_code.encode("utf-8")).decode("utf-8")
+        payload = {
+            "message": commit_msg,
+            "content": encoded_content,
+            "sha": file_sha,
+            "branch": branch
+        }
+        
+        update_res = await client.put(update_url, headers=headers, json=payload)
+        if update_res.status_code not in (200, 201):
+            raise HTTPException(status_code=400, detail=f"Failed to commit fix: {update_res.text}")
+            
+        return {"status": "success", "commit_url": update_res.json().get("commit", {}).get("html_url")}
 
 @app.get("/history")
 async def analysis_history(repo: str = None, limit: int = 20):

@@ -1,4 +1,5 @@
-import { Component, signal, computed, inject, OnInit } from '@angular/core';
+import { Component, signal, computed, inject, OnInit, AfterViewChecked } from '@angular/core';
+import mermaid from 'mermaid';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -58,7 +59,15 @@ interface DiffFile {
   imports: [CommonModule, FormsModule, HeaderComponent, ActivityLogComponent, FileTreeComponent],
   templateUrl: './app.component.html',
 })
-export class App implements OnInit {
+export class App implements OnInit, AfterViewChecked {
+  ngAfterViewChecked() {
+    if (this.currentTab() === 'arch') {
+      try {
+        mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+      } catch (e) {}
+    }
+  }
+
   private sanitizer = inject(DomSanitizer);
   private apiService = inject(ApiService);
 
@@ -71,6 +80,9 @@ export class App implements OnInit {
   logs = signal<LogEntry[]>([]); // Array of logs for the activity sidebar
   analysisData = signal<ReviewReport | null>(null); // Final structured review report from the agent
   critiqueData = signal<{ score: number, feedback?: string, accurate?: boolean } | null>(null); // AI self-critique results
+  autoFixes = signal<any | null>(null); // Phase 3: Auto-fix patches
+  generatedTests = signal<any | null>(null); // Phase 3: Unit tests
+  archReview = signal<any | null>(null); // Phase 3: Architecture Mermaid diagram
   errorMessage = signal<string | null>(null); // User-facing error messages
   successMessage = signal<string | null>(null); // User-facing success messages (e.g., after completion)
   selectedFilePath = signal<string | null>(null); // Path of the file currently selected in the tree
@@ -296,6 +308,9 @@ export class App implements OnInit {
       next: (data) => {
         if (data?.review_data) {
           this.analysisData.set(data.review_data);
+          this.autoFixes.set(data.review_data.auto_fixes || null);
+          this.generatedTests.set(data.review_data.generated_tests || null);
+          this.archReview.set(data.review_data.arch_review || null);
           this.currentTab.set('security');
           this.appendLog('info', `📂 Loaded past analysis from ${new Date(data.created_at).toLocaleDateString()}`);
         }
@@ -349,6 +364,9 @@ export class App implements OnInit {
     this.isAnalyzing.set(true);
     this.isAwaitingFeedback.set(false);
     this.analysisData.set(null);
+    this.autoFixes.set(null);
+    this.generatedTests.set(null);
+    this.archReview.set(null);
     this.refinementCount.set(0);
     this.threadId.set(null);
     this.startTime = Date.now();
@@ -398,7 +416,7 @@ export class App implements OnInit {
   }
 
   handleAgentEvent(data: any) {
-    const { node, status, reviews, critique, refinement_count, monologue, message, thread_id } = data;
+    const { node, status, reviews, critique, auto_fixes, generated_tests, arch_review, refinement_count, monologue, message, thread_id } = data;
 
     if (thread_id) {
       this.threadId.set(thread_id);
@@ -432,6 +450,12 @@ export class App implements OnInit {
       this.setNode('arbitrate', 'done'); 
       this.setNode('critique', 'active'); 
       if (critique) this.critiqueData.set(critique);
+    }
+    else if (node === 'enhance') {
+      this.setNode('arbitrate', 'done');
+      if (auto_fixes) this.autoFixes.set(auto_fixes);
+      if (generated_tests) this.generatedTests.set(generated_tests);
+      if (arch_review) this.archReview.set(arch_review);
     }
     else if (node === 'refine') { 
       this.setNode('human_review', 'done'); 
@@ -681,6 +705,37 @@ export class App implements OnInit {
     }
     this._highlightCache.set(code, result);
     return result;
+  }
+
+  // --- PHASE 3: APPLY FIX ---
+  applyingFixFor = signal<string | null>(null);
+
+  applyFix(fix: any) {
+    const githubUrl = this.prUrl();
+    const token = this.githubToken();
+    if (!githubUrl || !token) {
+      this.errorMessage.set("GitHub URL and Token are required to apply fixes.");
+      return;
+    }
+
+    if (!fix.is_safe && !confirm("Warning: This is a high-severity fix. Are you sure you want to apply it automatically?")) {
+      return;
+    }
+
+    this.applyingFixFor.set(fix.file_path);
+    this.apiService.applyFix(githubUrl, fix.file_path, fix.fixed_code, token, fix.description).subscribe({
+      next: (res) => {
+        this.successMessage.set(`Successfully applied patch to ${fix.file_path}!`);
+        this.applyingFixFor.set(null);
+        if (res.commit_url) {
+          window.open(res.commit_url, "_blank");
+        }
+      },
+      error: (err) => {
+        this.errorMessage.set(`Failed to apply fix: ${err.error?.detail || err.message || err.statusText}`);
+        this.applyingFixFor.set(null);
+      }
+    });
   }
 }
 

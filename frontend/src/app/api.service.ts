@@ -45,6 +45,17 @@ export class ApiService {
     return this.http.get<any>(`${this.baseUrl}/history/${id}`);
   }
 
+  applyFix(githubUrl: string, filePath: string, fixedCode: string, token: string, commitMessage?: string): Observable<any> {
+    const payload: any = {
+      github_url: githubUrl,
+      file_path: filePath,
+      fixed_code: fixedCode,
+      github_token: token
+    };
+    if (commitMessage) payload.commit_message = commitMessage;
+    return this.http.post(`${this.baseUrl}/apply-fix`, payload);
+  }
+
   private createSseObservable(url: string, payload: any): Observable<string> {
     return new Observable(observer => {
       const abortController = new AbortController();

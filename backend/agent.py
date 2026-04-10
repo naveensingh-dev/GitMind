@@ -15,7 +15,7 @@ from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from dotenv import load_dotenv
-from tenacity import retry, wait_exponential, stop_after_attempt
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
 
 # Internal schema and prompt imports
 from schemas import ReviewReport, CritiqueResult, AgentState
@@ -30,6 +30,9 @@ from prompts import (
 from diff_parser import build_review_context
 from config_loader import fetch_gitmind_config, filter_review_by_config
 from github_context import fetch_pr_comments
+from auto_fix import AutoFixReport, AUTO_FIX_PROMPT
+from test_gen import GeneratedTestSuite, TEST_GEN_PROMPT
+from arch_review import ArchReview, ARCH_REVIEW_PROMPT
 
 # Load environment variables from .env
 load_dotenv()
@@ -88,7 +91,16 @@ def get_model_instance(provider: str, model_name: str, api_key: str):
         return ChatOpenAI(model=model_name, temperature=0, api_key=api_key, base_url="https://api.groq.com/openai/v1")
     return None
 
-@retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3), reraise=True)
+def should_retry(exception):
+    """Do not retry if it's a Quota / Rate Limit / Resource Exhausted error or Auth error."""
+    error_str = str(exception).lower()
+    if "429" in error_str or "resource_exhausted" in error_str or "quota" in error_str:
+        return False
+    if "401" in error_str or "403" in error_str or "authentication" in error_str:
+        return False
+    return True
+
+@retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3), retry=retry_if_exception(should_retry), reraise=True)
 async def invoke_llm(structured_class, state: AgentState, messages: List):
     """
     Business Logic Wrapper for LLM calls.
@@ -317,6 +329,70 @@ async def arbitrate_node(state: AgentState):
         ]
     }
 
+async def enhance_node(state: AgentState):
+    """
+    Phase 3: Agentic Capabilities Node.
+    Runs Auto-Fix generation, Test generation, and Architecture Review concurrently.
+    """
+    print("Node: enhance_node")
+    if not state.diff or not state.reviews:
+        return {"status": "enhance_skipped"}
+        
+    diff_content = state.diff
+    review_json = state.reviews.model_dump_json()
+    
+    # Generate prompts
+    fix_messages = [
+        SystemMessage(content=AUTO_FIX_PROMPT),
+        HumanMessage(content=f"Diff:\n{diff_content}\n\nReview Findings:\n{review_json}")
+    ]
+    test_messages = [
+        SystemMessage(content=TEST_GEN_PROMPT),
+        HumanMessage(content=f"Generate unit tests for the changed functions in this diff:\n\n{diff_content}")
+    ]
+    arch_messages = [
+        SystemMessage(content=ARCH_REVIEW_PROMPT),
+        HumanMessage(content=f"Analyze the architecture and generate a Mermaid diagram for this diff:\n\n{diff_content}")
+    ]
+    
+    monologue = []
+    try:
+        monologue.append("🚀 Launching agentic capabilities (Auto-Fix, Tests, Architecture)...")
+        # Run all three concurrently
+        fix_res, test_res, arch_res = await asyncio.gather(
+            invoke_llm(AutoFixReport, state, fix_messages),
+            invoke_llm(GeneratedTestSuite, state, test_messages),
+            invoke_llm(ArchReview, state, arch_messages),
+            return_exceptions=True
+        )
+        
+        updates = {}
+        
+        if not isinstance(fix_res, Exception):
+            updates["auto_fixes"] = fix_res[0]
+            monologue.append(f"🔧 Generated {len(fix_res[0].fixes)} auto-fix patch(es).")
+        else:
+            monologue.append(f"⚠️ Auto-fix generation failed: {fix_res}")
+            
+        if not isinstance(test_res, Exception):
+            updates["generated_tests"] = test_res[0]
+            monologue.append(f"🧪 Generated {len(test_res[0].tests)} unit test(s).")
+        else:
+            monologue.append(f"⚠️ Test generation failed: {test_res}")
+            
+        if not isinstance(arch_res, Exception):
+            updates["arch_review"] = arch_res[0]
+            monologue.append(f"🏗️ Generated architecture review ({len(arch_res[0].observations)} observations).")
+        else:
+            monologue.append(f"⚠️ Architecture review failed: {arch_res}")
+            
+        updates["status"] = "enhance_complete"
+        updates["monologue"] = monologue
+        return updates
+        
+    except Exception as e:
+        return {"status": "enhance_failed", "monologue": [f"✗ Enhancement phase failed: {e}"]}
+
 
 async def critique_node(state: AgentState):
     """
@@ -390,15 +466,17 @@ workflow = StateGraph(AgentState)
 workflow.add_node("input", input_parse_node)
 workflow.add_node("dual_review", dual_review_node)
 workflow.add_node("arbitrate", arbitrate_node)
+workflow.add_node("enhance", enhance_node)
 workflow.add_node("critique", critique_node)
 workflow.add_node("human_review", human_review_node)
 workflow.add_node("refine", refinement_node)
 
-# Connect the nodes: input → dual_review → arbitrate → critique → human_review
+# Connect the nodes: input → dual_review → arbitrate → enhance → critique → human_review
 workflow.set_entry_point("input")
 workflow.add_edge("input", "dual_review")
 workflow.add_edge("dual_review", "arbitrate")
-workflow.add_edge("arbitrate", "critique")
+workflow.add_edge("arbitrate", "enhance")
+workflow.add_edge("enhance", "critique")
 workflow.add_edge("critique", "human_review")
 
 # Add loop logic with conditional edges
