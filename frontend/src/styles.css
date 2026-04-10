@@ -59,7 +59,7 @@ header{
 /* ──── LAYOUT ──── */
 .app{
   position:relative;z-index:1;
-  display:grid;grid-template-columns:240px 420px 1fr;
+  display:grid;grid-template-columns: 340px 420px 1fr;
   height:calc(100vh - 60px);
   overflow: hidden;
   transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -68,7 +68,7 @@ header{
   grid-template-columns: 420px 1fr;
 }
 .app.left-panel-collapsed {
-  grid-template-columns: 240px 52px 1fr;
+  grid-template-columns: 340px 52px 1fr;
 }
 .app.no-sidebar.left-panel-collapsed {
   grid-template-columns: 52px 1fr;

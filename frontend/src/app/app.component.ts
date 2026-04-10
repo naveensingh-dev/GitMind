@@ -216,7 +216,8 @@ export class App implements OnInit {
 
     for (const line of lines) {
       if (line.startsWith('diff --git')) {
-        const pathMatch = line.match(/b\/(.+)$/);
+        // match exactly " b/" preceded by a space to avoid matching 'b/' inside folder names like 'arch-tab/'
+        const pathMatch = line.match(/ b\/(.+)$/);
         currentFile = {
           path: pathMatch ? pathMatch[1] : 'unknown',
           additions: 0, deletions: 0, hunks: [], isOpen: false

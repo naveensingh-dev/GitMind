@@ -1,13 +1,23 @@
 import { Component, Input, Output, EventEmitter, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DiffFile } from '../../../core/models';
+
+type FileStatus = 'added' | 'deleted' | 'modified';
 
 interface TreeNode {
   name: string;
-  path?: string;
-  children: TreeNode[];
-  isOpen: boolean;
+  path: string;        // full path for files, folder path for folders
   isFile: boolean;
   level: number;
+  isOpen: boolean;
+  status: FileStatus;
+  additions: number;
+  deletions: number;
+  children: Map<string, TreeNode>;  // Use Map for O(1) lookup, no sort-corruption
+}
+
+interface FlatNode extends Omit<TreeNode, 'children'> {
+  hasChildren: boolean;
 }
 
 @Component({
@@ -15,176 +25,328 @@ interface TreeNode {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="file-tree-container">
-      <div class="tree-node" *ngFor="let node of flatTree()" 
-           [style.padding-left.px]="node.level * 12 + 12"
-           [class.file]="node.isFile"
-           [class.folder]="!node.isFile"
-           [class.active]="selectedPath === node.path"
-           (click)="onNodeClick(node)">
-        
-        <!-- Indentation Line Guides -->
-        <div class="indent-guide" *ngFor="let i of [].constructor(node.level)" 
-             [style.left.px]="i * 12 + 18"></div>
+    <div class="file-tree">
 
-        <span class="chevron" *ngIf="!node.isFile" [class.open]="node.isOpen">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      <!-- Summary header -->
+      <div class="tree-header">
+        <span class="stat-pill added"   *ngIf="summary().added   > 0"><span class="pill-dot"></span>{{ summary().added }} added</span>
+        <span class="stat-pill modified" *ngIf="summary().modified > 0"><span class="pill-dot"></span>{{ summary().modified }} changed</span>
+        <span class="stat-pill deleted"  *ngIf="summary().deleted > 0"><span class="pill-dot"></span>{{ summary().deleted }} deleted</span>
+      </div>
+
+      <!-- Tree rows -->
+      <div
+        *ngFor="let node of flatNodes(); trackBy: trackByPath"
+        class="tree-row"
+        [class.is-file]="node.isFile"
+        [class.is-folder]="!node.isFile"
+        [class.is-active]="selectedPath === node.path"
+        [class.st-added]="node.isFile && node.status === 'added'"
+        [class.st-deleted]="node.isFile && node.status === 'deleted'"
+        [class.st-modified]="node.isFile && node.status === 'modified'"
+        [style.padding-left.px]="node.level * 14 + 8"
+        (click)="onRowClick(node)">
+
+        <!-- Vertical indent guides -->
+        <span
+          *ngFor="let g of range(node.level)"
+          class="indent-line"
+          [style.left.px]="g * 14 + 15">
         </span>
-        
-        <span class="icon">
-          <ng-container *ngIf="node.isFile; else folderIcon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-svg"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+
+        <!-- Chevron (folders only) -->
+        <span class="chevron" [class.open]="node.isOpen" *ngIf="!node.isFile && node.hasChildren">
+          <svg viewBox="0 0 10 10" fill="currentColor">
+            <path d="M3 2l4 3-4 3V2z"/>
+          </svg>
+        </span>
+        <span class="chevron-placeholder" *ngIf="node.isFile || !node.hasChildren"></span>
+
+        <!-- Icon -->
+        <span class="node-icon">
+          <ng-container *ngIf="node.isFile">
+            <svg class="icon-file" [class.icon-added]="node.status==='added'" [class.icon-deleted]="node.status==='deleted'"
+                 viewBox="0 0 16 16" fill="none">
+              <path d="M9 1H3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5L9 1z" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M9 1v4h4" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
           </ng-container>
-          <ng-template #folderIcon>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="folder-svg"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-          </ng-template>
+          <ng-container *ngIf="!node.isFile">
+            <svg class="icon-folder" viewBox="0 0 16 16" fill="none">
+              <path d="M1 4a1 1 0 0 1 1-1h4l2 2h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4z" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+          </ng-container>
         </span>
-        
-        <span class="name">{{ node.name }}</span>
+
+        <!-- Status badge (files only) -->
+        <span class="badge badge-a" *ngIf="node.isFile && node.status === 'added'">A</span>
+        <span class="badge badge-m" *ngIf="node.isFile && node.status === 'modified'">M</span>
+        <span class="badge badge-d" *ngIf="node.isFile && node.status === 'deleted'">D</span>
+
+        <!-- Name -->
+        <span class="node-name" [title]="node.path">{{ node.name }}</span>
+
+
       </div>
     </div>
   `,
   styles: [`
-    .file-tree-container {
-      font-family: var(--sans);
-      font-size: 13px;
-      color: var(--text2);
-      user-select: none;
-      position: relative;
+    .file-tree { font-family: var(--sans); font-size: 12.5px; color: var(--text2); user-select: none; }
+
+    /* ── Header ── */
+    .tree-header {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 10px 12px 9px; border-bottom: 1px solid var(--border);
     }
-    .tree-node {
-      display: flex;
-      align-items: center;
-      padding: 6px 12px;
-      cursor: pointer;
-      gap: 10px;
-      border-radius: 6px;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      margin-bottom: 1px;
+    .stat-pill {
+      display: flex; align-items: center; gap: 4px;
+      font-family: var(--mono); font-size: 10px; font-weight: 600;
+      padding: 2px 8px; border-radius: 20px; letter-spacing: 0.02em;
     }
-    .tree-node:hover {
-      background: rgba(255, 255, 255, 0.04);
-      color: #fff;
+    .pill-dot { width: 5px; height: 5px; border-radius: 50%; }
+    .stat-pill.added    { color: #00ffa3; background: rgba(0,255,163,0.08); border: 1px solid rgba(0,255,163,0.2); }
+    .stat-pill.added    .pill-dot { background: #00ffa3; box-shadow: 0 0 5px #00ffa3; }
+    .stat-pill.modified { color: #fbbf24; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); }
+    .stat-pill.modified .pill-dot { background: #fbbf24; box-shadow: 0 0 5px #fbbf24; }
+    .stat-pill.deleted  { color: #f87171; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); }
+    .stat-pill.deleted  .pill-dot { background: #f87171; box-shadow: 0 0 5px #f87171; }
+
+    /* ── Row ── */
+    .tree-row {
+      display: flex; align-items: center; gap: 5px;
+      padding-top: 4px; padding-bottom: 4px; padding-right: 8px;
+      cursor: pointer; position: relative; border-radius: 5px;
+      transition: background 0.12s;
+      min-width: 0;
     }
-    .tree-node.active {
-      background: rgba(0, 255, 163, 0.08);
+    .tree-row:hover { background: rgba(255,255,255,0.04); color: #fff; }
+    .tree-row.is-active {
+      background: rgba(0,255,163,0.07);
       color: var(--g);
-      font-weight: 500;
     }
-    .tree-node.active::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 6px;
-      bottom: 6px;
-      width: 3px;
-      background: var(--g);
-      border-radius: 0 4px 4px 0;
-      box-shadow: 0 0 8px var(--g);
+    .tree-row.is-active::before {
+      content: ''; position: absolute;
+      left: 0; top: 3px; bottom: 3px; width: 2px;
+      background: var(--g); border-radius: 0 2px 2px 0;
     }
-    .indent-guide {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: rgba(255, 255, 255, 0.05);
+
+    /* File status tinting */
+    .tree-row.is-file.st-added   { color: rgba(0,255,163,0.9); }
+    .tree-row.is-file.st-deleted { color: rgba(248,113,113,0.85); text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.35); }
+    .tree-row.is-file.st-modified { color: var(--text2); }
+
+    /* Indent guides */
+    .indent-line {
+      position: absolute; top: 0; bottom: 0;
+      width: 1px; background: rgba(255,255,255,0.04);
       pointer-events: none;
     }
+
+    /* Chevron */
     .chevron {
-      width: 12px;
-      height: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: transform 0.2s;
-      opacity: 0.5;
+      width: 10px; height: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.15s; opacity: 0.4; color: var(--text3);
     }
     .chevron svg { width: 100%; height: 100%; }
-    .chevron.open { transform: rotate(90deg); opacity: 0.8; }
-    .icon {
-      width: 16px;
-      height: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .chevron.open { transform: rotate(90deg); opacity: 0.7; }
+    .chevron-placeholder { width: 10px; flex-shrink: 0; }
+
+    /* Icons */
+    .node-icon { width: 14px; height: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .node-icon svg { width: 100%; height: 100%; }
+    .icon-file   { color: rgba(255,255,255,0.25); }
+    .icon-file.icon-added   { color: rgba(0,255,163,0.7); }
+    .icon-file.icon-deleted { color: rgba(248,113,113,0.7); }
+    .icon-folder { color: rgba(56,212,245,0.5); }
+    .tree-row.is-active .icon-file  { color: var(--g); }
+    .tree-row.is-active .icon-folder { color: var(--g); }
+
+    /* Status badge */
+    .badge {
+      font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+      width: 14px; height: 14px; border-radius: 3px;
+      display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
     }
-    .icon svg { width: 100%; height: 100%; opacity: 0.7; }
-    .file-svg { color: var(--text3); }
-    .folder-svg { color: var(--cyan); opacity: 0.6; }
-    .tree-node.active .file-svg { color: var(--g); opacity: 1; }
-    .name {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      letter-spacing: 0.01em;
+    .badge-a { background: rgba(0,255,163,0.15);  color: #00ffa3;  border: 1px solid rgba(0,255,163,0.25); }
+    .badge-m { background: rgba(251,191,36,0.12); color: #fbbf24;  border: 1px solid rgba(251,191,36,0.22); }
+    .badge-d { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.22); }
+
+    /* Name */
+    .node-name {
+      flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      letter-spacing: 0.005em;
     }
+
+    /* Diff bar */
+    .diff-bar { display: flex; gap: 1px; flex-shrink: 0; height: 7px; overflow: hidden; border-radius: 1px; }
+    .bar-add { background: rgba(0,255,163,0.65); min-width: 1px; height: 100%; border-radius: 1px 0 0 1px; }
+    .bar-del { background: rgba(248,113,113,0.65); min-width: 1px; height: 100%; border-radius: 0 1px 1px 0; }
   `]
 })
 export class FileTreeComponent {
-  @Input() set files(filePaths: string[]) {
-    this.buildTree(filePaths);
+  @Input() set diffFiles(files: DiffFile[]) {
+    if (files?.length) {
+      this._build(files);
+    }
   }
+
+  // Legacy string-path fallback — convert to minimal DiffFile[]
+  @Input() set files(paths: string[]) {
+    if (paths?.length && !this._hasRealData) {
+      this._build(paths.map(p => ({ path: p, additions: 1, deletions: 0, hunks: [], isOpen: true })));
+    }
+  }
+
   @Input() selectedPath: string | null = null;
   @Output() fileSelect = new EventEmitter<string>();
 
-  private rootNodes = signal<TreeNode[]>([]);
+  private _hasRealData = false;
+  private _rootMap = signal(new Map<string, TreeNode>());  // top-level nodes by name
 
-  flatTree = computed(() => {
-    const flat: TreeNode[] = [];
-    const flatten = (nodes: TreeNode[]) => {
-      for (const node of nodes) {
-        flat.push(node);
-        if (!node.isFile && node.isOpen) {
-          flatten(node.children);
+  // ── Computed flat list for *ngFor ──────────────────────────────────────────
+  flatNodes = computed<FlatNode[]>(() => {
+    const result: FlatNode[] = [];
+    this._flatten(Array.from(this._rootMap().values()), result);
+    return result;
+  });
+
+  // ── Overall PR summary ────────────────────────────────────────────────────
+  summary = computed(() => {
+    let added = 0, modified = 0, deleted = 0;
+    const walk = (map: Map<string, TreeNode>) => {
+      for (const n of map.values()) {
+        if (n.isFile) {
+          if (n.status === 'added') added++;
+          else if (n.status === 'deleted') deleted++;
+          else modified++;
+        } else {
+          walk(n.children);
         }
       }
     };
-    flatten(this.rootNodes());
-    return flat;
+    walk(this._rootMap());
+    return { added, modified, deleted };
   });
 
-  private buildTree(paths: string[]) {
-    const root: TreeNode[] = [];
-    
-    paths.forEach(path => {
-      const parts = path.split('/');
-      let currentLevel = root;
-      
-      parts.forEach((part, index) => {
-        const isFile = index === parts.length - 1;
-        let node = currentLevel.find(n => n.name === part);
-        
-        if (!node) {
-          node = {
-            name: part,
-            path: isFile ? path : undefined,
-            children: [],
-            isOpen: true,
-            isFile: isFile,
-            level: index
-          };
-          currentLevel.push(node);
-          // Sort folders first, then alphabetically
-          currentLevel.sort((a, b) => {
-            if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
-            return a.name.localeCompare(b.name);
-          });
-        }
-        currentLevel = node.children;
-      });
-    });
-    
-    this.rootNodes.set(root);
+  range(n: number): number[] { return Array.from({ length: n }, (_, i) => i); }
+  trackByPath(_: number, n: FlatNode) { return n.path; }
+
+  barWidth(add: number, del: number, type: 'add' | 'del'): number {
+    const total = add + del;
+    if (total === 0) return 0;
+    const maxPx = 28;
+    return Math.max(1, Math.round((type === 'add' ? add : del) / total * maxPx));
   }
 
-  onNodeClick(node: TreeNode) {
+  onRowClick(node: FlatNode) {
     if (node.isFile) {
       this.fileSelect.emit(node.path);
     } else {
-      node.isOpen = !node.isOpen;
-      this.rootNodes.update(nodes => [...nodes]); // Trigger re-computation
+      // Toggle folder open/closed via functional update to trigger reactivity
+      this._rootMap.update(root => {
+        const target = this._findNode(root, node.path);
+        if (target) target.isOpen = !target.isOpen;
+        return new Map(root);  // new Map reference = signal re-triggers
+      });
     }
+  }
+
+  // ── Build tree from DiffFile[] ─────────────────────────────────────────────
+  private _build(files: DiffFile[]) {
+    this._hasRealData = true;
+
+    // Deduplicate by path
+    const seen = new Set<string>();
+    const unique = files.filter(f => {
+      if (seen.has(f.path)) return false;
+      seen.add(f.path);
+      return true;
+    });
+
+    const root = new Map<string, TreeNode>();
+
+    for (const file of unique) {
+      const parts = file.path.split('/').filter(p => p.length > 0);
+      if (parts.length === 0) continue;
+
+      const status = this._getStatus(file);
+      let currentMap = root;
+      let folderPath = '';
+
+      for (let i = 0; i < parts.length; i++) {
+        const name = parts[i];
+        const isFile = i === parts.length - 1;
+        const nodePath = folderPath ? `${folderPath}/${name}` : name;
+        folderPath = nodePath;
+
+        if (!currentMap.has(name)) {
+          const node: TreeNode = {
+            name,
+            path: nodePath,
+            isFile,
+            level: i,
+            isOpen: true,
+            status: isFile ? status : 'modified',
+            additions: isFile ? file.additions : 0,
+            deletions: isFile ? file.deletions : 0,
+            children: new Map(),
+          };
+          currentMap.set(name, node);
+        } else if (isFile) {
+          // Update existing node with real statistics
+          const existing = currentMap.get(name)!;
+          existing.status = status;
+          existing.additions = file.additions;
+          existing.deletions = file.deletions;
+        }
+
+        currentMap = currentMap.get(name)!.children;
+      }
+    }
+
+    this._rootMap.set(root);
+  }
+
+  private _getStatus(file: DiffFile): FileStatus {
+    if (file.additions > 0 && file.deletions === 0) return 'added';
+    if (file.deletions > 0 && file.additions === 0) return 'deleted';
+    return 'modified';
+  }
+
+  private _flatten(nodes: TreeNode[], result: FlatNode[]) {
+    // Sort: folders first, then alphabetically
+    const sorted = [...nodes].sort((a, b) => {
+      if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const node of sorted) {
+      result.push({
+        name: node.name,
+        path: node.path,
+        isFile: node.isFile,
+        level: node.level,
+        isOpen: node.isOpen,
+        status: node.status,
+        additions: node.additions,
+        deletions: node.deletions,
+        hasChildren: node.children.size > 0,
+      });
+      if (!node.isFile && node.isOpen) {
+        this._flatten(Array.from(node.children.values()), result);
+      }
+    }
+  }
+
+  private _findNode(map: Map<string, TreeNode>, path: string): TreeNode | null {
+    for (const node of map.values()) {
+      if (node.path === path) return node;
+      if (!node.isFile) {
+        const found = this._findNode(node.children, path);
+        if (found) return found;
+      }
+    }
+    return null;
   }
 }

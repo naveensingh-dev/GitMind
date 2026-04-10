@@ -10,9 +10,9 @@
     </div>
   </div>
   <div class="sidebar-content">
-    <app-file-tree 
-      [files]="filePaths" 
-      [selectedPath]="selectedFilePath" 
+    <app-file-tree
+      [diffFiles]="parsedFiles"
+      [selectedPath]="selectedFilePath"
       (fileSelect)="scrollToFileAction.emit($event)">
     </app-file-tree>
   </div>

@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FileTreeComponent } from '../../shared/components/file-tree/file-tree.component';
+import { DiffFile } from '../../core/models';
 
 @Component({
   selector: 'app-sidebar-layout',
@@ -15,6 +16,7 @@ import { FileTreeComponent } from '../../shared/components/file-tree/file-tree.c
 export class SidebarLayoutComponent {
   @Input() diffInput: string = '';
   @Input() filePaths: any[] = [];
+  @Input() parsedFiles: DiffFile[] = [];   // ← full file objects with status
   @Input() selectedFilePath: string | null = null;
 
   @Output() scrollToFileAction = new EventEmitter<string>();
