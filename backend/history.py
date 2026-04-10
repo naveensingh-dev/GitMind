@@ -9,6 +9,7 @@ import sqlite3
 import os
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
+import hashlib
 
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "gitmind_history.db")
@@ -45,6 +46,40 @@ def _get_connection() -> sqlite3.Connection:
             UNIQUE(repo, issue_signature)
         )
     """)
+    
+    # Run migration to add diff_hash if it doesn't exist
+    try:
+        conn.execute("ALTER TABLE analysis_history ADD COLUMN diff_hash TEXT")
+    except sqlite3.OperationalError:
+        pass
+        
+    # Run migration to add diff_text if it doesn't exist
+    try:
+        conn.execute("ALTER TABLE analysis_history ADD COLUMN diff_text TEXT")
+    except sqlite3.OperationalError:
+        pass
+        
+    # Run migration to add api_key and github_token
+    try:
+        conn.execute("ALTER TABLE analysis_history ADD COLUMN api_key TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE analysis_history ADD COLUMN github_token TEXT")
+    except sqlite3.OperationalError:
+        pass
+        
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS repo_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_url TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    
     conn.commit()
     return conn
 
@@ -83,6 +118,10 @@ def save_analysis(
     model: str,
     provider: str,
     review_report: Dict[str, Any],
+    diff_hash: Optional[str] = None,
+    diff_text: Optional[str] = None,
+    api_key: Optional[str] = None,
+    github_token: Optional[str] = None
 ) -> int:
     """
     Saves a completed analysis to the history database.
@@ -107,8 +146,8 @@ def save_analysis(
             INSERT INTO analysis_history 
             (github_url, repo, model, provider, approval_status, confidence_score,
              security_count, performance_count, style_count, high_severity_count,
-             review_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             review_json, diff_hash, diff_text, api_key, github_token, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             github_url,
             repo,
@@ -121,6 +160,10 @@ def save_analysis(
             len(style),
             high_count,
             json.dumps(review_report),
+            diff_hash,
+            diff_text,
+            api_key,
+            github_token,
             datetime.now(timezone.utc).isoformat(),
         ))
         conn.commit()
@@ -140,7 +183,7 @@ def get_history(repo: Optional[str] = None, limit: int = 20) -> List[Dict[str, A
             rows = conn.execute(
                 "SELECT id, github_url, repo, model, provider, approval_status, "
                 "confidence_score, security_count, performance_count, style_count, "
-                "high_severity_count, created_at "
+                "high_severity_count, api_key, github_token, created_at "
                 "FROM analysis_history WHERE repo LIKE ? ORDER BY created_at DESC LIMIT ?",
                 (f"%{repo}%", limit)
             ).fetchall()
@@ -148,7 +191,7 @@ def get_history(repo: Optional[str] = None, limit: int = 20) -> List[Dict[str, A
             rows = conn.execute(
                 "SELECT id, github_url, repo, model, provider, approval_status, "
                 "confidence_score, security_count, performance_count, style_count, "
-                "high_severity_count, created_at "
+                "high_severity_count, api_key, github_token, created_at "
                 "FROM analysis_history ORDER BY created_at DESC LIMIT ?",
                 (limit,)
             ).fetchall()
@@ -173,5 +216,57 @@ def get_analysis_by_id(analysis_id: int) -> Optional[Dict[str, Any]]:
                 result["review_data"] = json.loads(result["review_json"])
             return result
         return None
+    finally:
+        conn.close()
+
+def get_cached_analysis(diff_hash: str, model: str, provider: str) -> Optional[Dict[str, Any]]:
+    """Returns a cached analysis based on the precise diff hash + model combination."""
+    if not diff_hash:
+        return None
+        
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM analysis_history WHERE diff_hash = ? AND model = ? AND provider = ? ORDER BY created_at DESC LIMIT 1",
+            (diff_hash, model, provider)
+        ).fetchone()
+        
+        if row:
+            result = dict(row)
+            if result.get("review_json"):
+                result["review_data"] = json.loads(result["review_json"])
+            return result
+        return None
+    finally:
+        conn.close()
+
+def queue_repo_for_scan(repo_url: str, provider: str, model: str) -> int:
+    """Queues a repository for asynchronous batch scanning."""
+    conn = _get_connection()
+    try:
+        cursor = conn.execute("""
+            INSERT INTO repo_queue (repo_url, provider, model, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (repo_url, provider, model, datetime.now(timezone.utc).isoformat()))
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+def get_pending_scans() -> List[Dict[str, Any]]:
+    """Retrieves all pending batch scan jobs."""
+    conn = _get_connection()
+    try:
+        rows = conn.execute("SELECT * FROM repo_queue WHERE status = 'pending' ORDER BY created_at ASC").fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+def update_scan_status(scan_id: int, status: str):
+    """Updates the status of a batch scan (e.g. 'completed' or 'failed')."""
+    conn = _get_connection()
+    try:
+        conn.execute("UPDATE repo_queue SET status = ? WHERE id = ?", (status, scan_id))
+        conn.commit()
     finally:
         conn.close()

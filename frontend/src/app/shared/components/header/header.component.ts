@@ -27,6 +27,7 @@ import { CommonModule } from '@angular/common';
           <span class="loop-text">Refinement loop</span>
           <span class="loop-count">×{{ refinementCount() }}</span>
         </div>
+        <span class="tokens-badge" *ngIf="tokensSaved() > 0" title="Tokens saved via TOON">🍃 {{ tokensSaved() | number }} saved</span>
         <span class="header-badge">LangGraph · v2.2</span>
         <div class="status-dot"><div class="dot"></div><span>Agent online</span></div>
       </div>
@@ -46,6 +47,20 @@ import { CommonModule } from '@angular/common';
       font-size: 11px;
       color: var(--orange);
       animation: fadeIn 0.3s ease-out;
+    }
+    .tokens-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: rgba(0, 255, 163, 0.1);
+      border: 1px solid rgba(0, 255, 163, 0.25);
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: #00ffa3;
+      margin-right: 8px;
     }
     .loop-icon {
       font-size: 14px;
@@ -74,4 +89,5 @@ import { CommonModule } from '@angular/common';
 })
 export class HeaderComponent {
   refinementCount = input(0);
+  tokensSaved = input(0);
 }

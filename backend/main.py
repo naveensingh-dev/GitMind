@@ -3,13 +3,14 @@ import asyncio
 import uuid
 import re
 import httpx
-from fastapi import FastAPI, Request, HTTPException
+import hashlib
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from agent import app_graph, fetch_github_diff_text
 from schemas import AgentState, ReviewItem, ReviewReport
-from pydantic import BaseModel
-from history import save_analysis, get_history, get_analysis_by_id, add_suppression
+from pydantic import BaseModel, ValidationError
+from history import save_analysis, get_history, get_analysis_by_id, add_suppression, get_suppressed_issues, get_cached_analysis, queue_repo_for_scan, update_scan_status
 
 app = FastAPI(title="GitMind API")
 
@@ -68,7 +69,7 @@ async def get_latest_commit_sha(owner: str, repo: str, pull_number: str, token: 
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}"
     headers = {
-        "Authorization": f"token {token}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3+json"
     }
     async with httpx.AsyncClient() as client:
@@ -99,7 +100,7 @@ async def push_status_to_github(github_url: str, token: str, state: str, descrip
 
     url = f"https://api.github.com/repos/{owner}/{repo}/statuses/{sha}"
     headers = {
-        "Authorization": f"token {token}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3+json"
     }
     payload = {
@@ -146,6 +147,8 @@ async def analyze_pr(request: Request):
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid state data: {str(e)}")
 
+    diff_hash = hashlib.sha256(f"{initial_state.diff}_{initial_state.selected_provider}_{initial_state.selected_model}".encode()).hexdigest()
+
     async def event_generator():
         """Generator for Server-Sent Events."""
         yield f"data: {json.dumps({'thread_id': thread_id})}\n\n"
@@ -154,6 +157,25 @@ async def analyze_pr(request: Request):
         if github_url and github_token:
             await push_status_to_github(github_url, github_token, "pending", "GitMind is analyzing the changes...")
 
+        # --- CACHE INTERCEPTOR ---
+        cached_analysis = get_cached_analysis(diff_hash, initial_state.selected_model, initial_state.selected_provider)
+        if cached_analysis and cached_analysis.get("review_data"):
+            print(f"DEBUG: Cache HIT for {diff_hash}!")
+            payload = {
+                "node": "arbitrate",
+                "status": "arbitrate_complete",
+                "reviews": cached_analysis["review_data"],
+                "monologue": ["⚡ Semantic Cache Hit! Returning instantly."],
+                "tokens_saved": 0
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
+            
+            # Auto-approve simulated github status
+            if github_url and github_token:
+                await push_status_to_github(github_url, github_token, "success", "Analysis loaded from cache.")
+                
+            return  # Stop execution completely
+            
         try:
             final_reviews = None
             # Stream events from the LangGraph agent
@@ -181,6 +203,7 @@ async def analyze_pr(request: Request):
                     "node": node_name,
                     "status": state_update.get("status"),
                     "refinement_count": state_update.get("refinement_count", 0),
+                    "tokens_saved": state_update.get("tokens_saved", 0),
                     "monologue": state_update.get("monologue", []),
                     "reviews": state_update.get("reviews").model_dump() if state_update.get("reviews") else None,
                     "critique": state_update.get("critique").model_dump() if state_update.get("critique") else None,
@@ -214,6 +237,10 @@ async def analyze_pr(request: Request):
                         model=initial_state.selected_model,
                         provider=initial_state.selected_provider,
                         review_report=final_reviews.model_dump(),
+                        diff_hash=diff_hash,
+                        diff_text=initial_state.diff,
+                        api_key=initial_state.api_key,
+                        github_token=github_token
                     )
                 except Exception as e:
                     print(f"DEBUG: Failed to save analysis history: {e}")
@@ -226,6 +253,83 @@ async def analyze_pr(request: Request):
             yield f"data: {json.dumps(error_payload)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+async def batch_worker_task(repo_url: str, provider: str, model: str, scan_id: int):
+    """Background worker to silently process queued repositories."""
+    diff = await fetch_github_diff_text(repo_url)
+    if not diff:
+        update_scan_status(scan_id, 'failed_no_diff')
+        return
+
+    # Simulate basic state for silent job
+    initial_state = AgentState(
+        diff=diff,
+        github_url=repo_url,
+        security_scan=True,
+        perf_analysis=True,
+        style_review=True,
+        self_critique=True,
+        selected_provider=provider,
+        selected_model=model,
+        status="started"
+    )
+    
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    
+    try:
+        final_reviews = None
+        async for event in app_graph.astream(initial_state.model_dump(), config=config):
+            if not event or "__interrupt__" in event:
+                continue
+            
+            node_name = list(event.keys())[0]
+            if event[node_name].get("reviews"):
+                rev = event[node_name].get("reviews")
+                final_reviews = ReviewReport(**rev) if isinstance(rev, dict) else rev
+                
+        if final_reviews:
+            diff_hash = hashlib.sha256(f"{diff}_{provider}_{model}".encode()).hexdigest()
+            save_analysis(
+                github_url=repo_url,
+                model=model,
+                provider=provider,
+                review_report=final_reviews.model_dump(),
+                diff_hash=diff_hash,
+                diff_text=diff,
+                api_key=None,  # Batch process may not have individual user keys immediately
+                github_token=None
+            )
+            update_scan_status(scan_id, 'completed')
+        else:
+            update_scan_status(scan_id, 'failed')
+            
+    except Exception as e:
+        print(f"Batch Worker Failed for {repo_url}: {e}")
+        update_scan_status(scan_id, 'error')
+
+
+@app.post("/batch_scan")
+async def queue_batch_scan(request: Request, background_tasks: BackgroundTasks):
+    """Queues a repository for asynchronous overnight scanning."""
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        
+    repo_urls = data.get("repo_urls", [])
+    provider = data.get("provider", "gemini")
+    model = data.get("model", "gemini-1.5-flash")
+    
+    if not repo_urls:
+        raise HTTPException(status_code=400, detail="repo_urls missing")
+        
+    queued_jobs = []
+    for url in repo_urls:
+        scan_id = queue_repo_for_scan(url, provider, model)
+        background_tasks.add_task(batch_worker_task, url, provider, model, scan_id)
+        queued_jobs.append(scan_id)
+        
+    return {"status": "queued", "queued_jobs": len(queued_jobs)}
 
 @app.post("/feedback")
 async def provide_feedback(request: Request):
@@ -259,6 +363,7 @@ async def provide_feedback(request: Request):
                     "node": node_name,
                     "status": state_update.get("status"),
                     "refinement_count": state_update.get("refinement_count", 0),
+                    "tokens_saved": state_update.get("tokens_saved", 0),
                     "monologue": state_update.get("monologue", []),
                     "reviews": state_update.get("reviews").model_dump() if state_update.get("reviews") else None,
                     "critique": state_update.get("critique").model_dump() if state_update.get("critique") else None
@@ -307,7 +412,7 @@ async def push_to_github(req: GithubCommentRequest):
         }
 
     headers = {
-        "Authorization": f"token {req.github_token}",
+        "Authorization": f"Bearer {req.github_token}",
         "Accept": "application/vnd.github.v3+json"
     }
 
@@ -329,6 +434,7 @@ async def apply_fix(request: Request):
     github_url = data.get("github_url")
     github_token = data.get("github_token")
     file_path = data.get("file_path")
+    original_code = data.get("original_code", "")
     fixed_code = data.get("fixed_code")
     commit_msg = data.get("commit_message", f"Auto-Fix: {file_path}")
     
@@ -344,7 +450,7 @@ async def apply_fix(request: Request):
         raise HTTPException(status_code=400, detail="Cannot apply fix: Please provide a Pull Request URL (not a Commit URL) so GitMind knows which branch to push to.")
     
     headers = {
-        "Authorization": f"token {github_token}",
+        "Authorization": f"Bearer {github_token}",
         "Accept": "application/vnd.github.v3+json"
     }
     
@@ -369,7 +475,24 @@ async def apply_fix(request: Request):
         
         # 3. Update file with commit
         update_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
-        encoded_content = base64.b64encode(fixed_code.encode("utf-8")).decode("utf-8")
+        
+        old_content_b64 = file_res.json().get("content", "")
+        if not old_content_b64:
+            blob_url_fetch = file_res.json().get("git_url")
+            if blob_url_fetch:
+                blob_res_fetch = await client.get(blob_url_fetch, headers=headers)
+                old_content_b64 = blob_res_fetch.json().get("content", "")
+                
+        old_content = base64.b64decode(old_content_b64).decode("utf-8") if old_content_b64 else ""
+        
+        if original_code and original_code in old_content:
+            new_content = old_content.replace(original_code, fixed_code)
+        elif original_code.strip() and original_code.strip() in old_content:
+            new_content = old_content.replace(original_code.strip(), fixed_code.strip())
+        else:
+            new_content = old_content.replace(original_code, fixed_code) if original_code else fixed_code
+
+        encoded_content = base64.b64encode(new_content.encode("utf-8")).decode("utf-8")
         payload = {
             "message": commit_msg,
             "content": encoded_content,
@@ -404,7 +527,7 @@ async def batch_apply_fixes(request: Request):
         raise HTTPException(status_code=400, detail="Cannot apply batch fix: Please provide a Pull Request URL.")
     
     headers = {
-        "Authorization": f"token {github_token}",
+        "Authorization": f"Bearer {github_token}",
         "Accept": "application/vnd.github.v3+json"
     }
     
@@ -434,12 +557,35 @@ async def batch_apply_fixes(request: Request):
         # 4. Create a blob for each fixed file
         tree_elements = []
         for fix in fixes:
+            file_url_batch = f"https://api.github.com/repos/{owner}/{repo}/contents/{fix['file_path']}?ref={branch}"
+            file_res_batch = await client.get(file_url_batch, headers=headers)
+            if file_res_batch.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"File {fix['file_path']} not found")
+                
+            old_content_b64 = file_res_batch.json().get("content", "")
+            if not old_content_b64:
+                blob_url_fetch = file_res_batch.json().get("git_url")
+                if blob_url_fetch:
+                    blob_res_fetch = await client.get(blob_url_fetch, headers=headers)
+                    old_content_b64 = blob_res_fetch.json().get("content", "")
+                    
+            old_content = base64.b64decode(old_content_b64).decode("utf-8") if old_content_b64 else ""
+            original_code = fix.get("original_code", "")
+            fixed_code = fix.get("fixed_code", "")
+            
+            if original_code and original_code in old_content:
+                new_content = old_content.replace(original_code, fixed_code)
+            elif original_code.strip() and original_code.strip() in old_content:
+                new_content = old_content.replace(original_code.strip(), fixed_code.strip())
+            else:
+                new_content = old_content.replace(original_code, fixed_code) if original_code else fixed_code
+
             blob_url = f"https://api.github.com/repos/{owner}/{repo}/git/blobs"
-            encoded = base64.b64encode(fix["fixed_code"].encode("utf-8")).decode("utf-8")
+            encoded = base64.b64encode(new_content.encode("utf-8")).decode("utf-8")
             blob_payload = {"content": encoded, "encoding": "base64"}
             blob_res = await client.post(blob_url, headers=headers, json=blob_payload)
             if blob_res.status_code != 201:
-                raise HTTPException(status_code=400, detail=f"Failed to create blob for {fix['file_path']}")
+                raise HTTPException(status_code=400, detail=f"Failed to create blob for {fix['file_path']}: {blob_res.text}")
             
             blob_sha = blob_res.json().get("sha")
             tree_elements.append({

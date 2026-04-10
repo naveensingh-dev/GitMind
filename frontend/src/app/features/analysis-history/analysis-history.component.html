@@ -1,18 +1,93 @@
-<div class="history-section" *ngIf="analysisHistory.length > 0">
-  <div class="history-header">
-    <span class="history-title">📂 Recent Analyses</span>
+<div class="history-table-container">
+  <div class="history-header-bar">
+    <span class="history-title">📂 Audit Ledger & History</span>
+    <!-- <span class="history-count" *ngIf="filteredHistory().length">{{ filteredHistory().length }} Runs</span> -->
   </div>
-  <div class="history-list">
-    <div class="history-item" *ngFor="let h of analysisHistory.slice(0, 8)" (click)="loadPastAnalysisAction.emit(h)">
-      <div class="history-item-top">
-        <span class="history-status" [ngClass]="'status-' + h.approval_status">{{ h.approval_status === 'approved' ? '✓' : h.approval_status === 'rejected' ? '✗' : '!' }}</span>
-        <span class="history-repo">{{ h.repo }}</span>
-      </div>
-      <div class="history-item-meta">
-        <span>{{ h.model }}</span>
-        <span>{{ h.security_count + h.performance_count + h.style_count }} findings</span>
-        <span>{{ h.created_at | date:'short' }}</span>
-      </div>
+
+  <div class="table-scroll-viewport">
+    <table class="history-table">
+      <thead>
+        <!-- Main Headers -->
+        <tr>
+          <th style="width: 5%">Status</th>
+          <th style="width: 15%">Date</th>
+          <th style="width: 25%">Repository / PR</th>
+          <th style="width: 15%">Model</th>
+          <th style="width: 20%">LLM API Key</th>
+          <th style="width: 20%">GitHub Token</th>
+        </tr>
+
+        <!-- Filter Row -->
+        <tr class="filter-row">
+          <th></th>
+          <th><input type="text" placeholder="Filter date..." [ngModel]="filterDate()"
+              (ngModelChange)="filterDate.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter repo..." [ngModel]="filterUrl()"
+              (ngModelChange)="filterUrl.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter model..." [ngModel]="filterModel()"
+              (ngModelChange)="filterModel.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter key..." [ngModel]="filterLlmKey()"
+              (ngModelChange)="filterLlmKey.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter PAT..." [ngModel]="filterPat()"
+              (ngModelChange)="filterPat.set($event); onFilterChange()"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let h of paginatedHistory()" (click)="loadPastAnalysisAction.emit(h)" class="history-row">
+          <td class="status-cell">
+            <span class="status-indicator" [ngClass]="'status-' + h.approval_status">
+              {{ h.approval_status === 'approved' ? '✓' : h.approval_status === 'rejected' ? '✗' : '!' }}
+            </span>
+          </td>
+          <td class="date-cell">{{ h.created_at | date:'short' }}</td>
+          <td class="repo-cell">
+            <div class="repo-name">{{ h.repo }}</div>
+            <div class="repo-url">{{ h.github_url }}</div>
+          </td>
+          <td class="model-cell">{{ h.model }}</td>
+          <td class="key-cell font-mono">{{ maskToken(h.api_key) }}</td>
+          <td class="key-cell font-mono">{{ maskToken(h.github_token) }}</td>
+        </tr>
+
+        <tr *ngIf="filteredHistory().length === 0">
+          <td colspan="6" class="empty-table">
+            <span class="empty-icon">📂</span>
+            <span class="empty-text">No audit logs match these filters.</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Paginator Footer -->
+  <div class="paginator-bar" *ngIf="filteredHistory().length > 0">
+    <div class="page-size-selector">
+      <span class="page-info">Rows per page:</span>
+      <select class="page-select" [ngModel]="pageSize()" (ngModelChange)="changePageSize($event)">
+        <option [value]="10">10</option>
+        <option [value]="25">25</option>
+        <option [value]="50">50</option>
+        <option [value]="100">100</option>
+      </select>
+    </div>
+
+    <!-- Center: Total record count -->
+    <div class="page-total">
+      <span class="page-total-chip">
+        {{ filteredHistory().length }} {{ filteredHistory().length === analysisHistory.length ? 'total records' : 'of ' + analysisHistory.length + ' filtered' }}
+      </span>
+    </div>
+
+    <div class="page-controls">
+      <button class="page-btn" [disabled]="currentPage() === 1" (click)="goToFirstPage()" title="First Page">⏮</button>
+      <button class="page-btn" [disabled]="currentPage() === 1" (click)="prevPage()" title="Previous Page">◀</button>
+
+      <span class="page-info">Page {{ currentPage() }} of {{ totalPages() }}</span>
+
+      <button class="page-btn" [disabled]="currentPage() === totalPages()" (click)="nextPage()"
+        title="Next Page">▶</button>
+      <button class="page-btn" [disabled]="currentPage() === totalPages()" (click)="goToLastPage()"
+        title="Last Page">⏭</button>
     </div>
   </div>
 </div>

@@ -1,5 +1,5 @@
 <!-- HEADER -->
-<app-header [refinementCount]="refinementCount()"></app-header>
+<app-header [refinementCount]="refinementCount()" [tokensSaved]="tokensSaved()"></app-header>
 
 <app-overlays 
   [errorMessage]="errorMessage()" 
@@ -73,61 +73,7 @@
     (scrollToFileAction)="scrollToFile($event)">
   </app-sidebar-layout>
 
-  <!-- LEFT PANEL -->
-  <div class="left-panel" [class.collapsed]="isLeftPanelCollapsed()">
-    <div class="collapse-toggle" (click)="toggleLeftPanel()" title="Toggle Agent Panel">
-      <svg *ngIf="!isLeftPanelCollapsed()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="15 18 9 12 15 6"></polyline></svg>
-      <svg *ngIf="isLeftPanelCollapsed()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="9 18 15 12 9 6"></polyline></svg>
-    </div>
 
-    <!-- Content Wrapper for collapsing -->
-    <div class="left-panel-content">
-    <app-agent-controls
-      [prUrl]="prUrl()"
-      [diffInput]="diffInput()"
-      [isAnalyzing]="isAnalyzing()"
-      [selectedProvider]="selectedProvider()"
-      [selectedModel]="selectedModel()"
-      [currentModelOptions]="currentModelOptions()"
-      [userApiKey]="userApiKey()"
-      [githubToken]="githubToken()"
-      [opts]="opts"
-      (prUrlChange)="prUrl.set($event)"
-      (fetchPrDiff)="fetchPrDiff()"
-      (selectedProviderChange)="selectedProvider.set($event)"
-      (selectedModelChange)="selectedModel.set($event)"
-      (providerChangeAction)="onProviderChange()"
-      (modelChangeAction)="onModelChange()"
-      (userApiKeyChange)="userApiKey.set($event)"
-      (saveSettings)="saveSettings()"
-      (githubTokenChange)="githubToken.set($event)"
-      (tokenInputChange)="onTokenInputChange($event)"
-      (loadExample)="loadExample()"
-      (startAnalysis)="startAnalysis()">
-    </app-agent-controls>
-
-    <!-- PIPELINE -->
-    <div class="pipeline-section">
-      <app-pipeline-visualizer [nodeStates]="nodeStates()"></app-pipeline-visualizer>
-    </div>
-
-    <!-- HUMAN FEEDBACK UI Extracted -->
-    <app-human-feedback
-      [isAwaitingFeedback]="isAwaitingFeedback()"
-      [userFeedback]="userFeedback()"
-      (userFeedbackChange)="userFeedback.set($event)"
-      (submitFeedbackAction)="submitFeedback()">
-    </app-human-feedback>
-
-    <!-- LOG -->
-    <app-activity-log [logs]="logs()"></app-activity-log>
-    </div> <!-- /left-panel-content -->
-
-    <!-- Collapsed state representation -->
-    <div class="left-panel-collapsed-view" *ngIf="isLeftPanelCollapsed()">
-      <span class="vertical-text">AGENT CONTROLS</span>
-    </div>
-  </div>
 
   <!-- RIGHT PANEL -->
   <div class="right-panel">
@@ -185,7 +131,7 @@
 
 
           <!-- History Tab -->
-          <div class="tab-panel active" *ngIf="currentTab() === 'history'">
+          <div class="tab-panel history-panel active" *ngIf="currentTab() === 'history'">
             <app-analysis-history *ngIf="analysisHistory().length"
               [analysisHistory]="analysisHistory()" 
               (loadPastAnalysisAction)="loadPastAnalysis($event)">
@@ -304,10 +250,79 @@
               <div class="empty-text">No raw report available yet.</div>
             </div>
           </div>
+
+          <div class="tab-panel active" *ngIf="currentTab() === 'logs'">
+            <app-activity-log *ngIf="!!diffInput()" [logs]="logs()"></app-activity-log>
+            <div class="empty-state" *ngIf="!diffInput()">
+              <div class="empty-icon">📝</div>
+              <div class="empty-text">No activity logs available.</div>
+            </div>
+          </div>
           </div><!-- /tab-panels -->
         </div><!-- /rail-layout -->
       </div><!-- /results-content -->
     </div><!-- /results-area -->
   </div><!-- /right-panel -->
 </div><!-- /app -->
+
+<!-- FLOATING GLASS COMMAND CENTER -->
+<div class="floating-agent-panel" appDraggable
+     [class.centered-hero]="!diffInput()" 
+     [class.bottom-dock]="!!diffInput()" 
+     [class.collapsed]="isLeftPanelCollapsed()">
+     
+  <!-- Collapse Toggle FAB Button (when minimized) -->
+  <div class="agent-fab-button" *ngIf="isLeftPanelCollapsed()" (click)="toggleLeftPanel()" title="Expand Agent Panel">
+    <div class="fab-icon">🤖</div>
+  </div>
+
+  <!-- Main Floating Widget Content -->
+  <div class="floating-glass-content" *ngIf="!isLeftPanelCollapsed()">
+    <div class="floating-header">
+      <span class="widget-title">Agent Console</span>
+      <div class="widget-controls">
+        <button class="minimize-btn" (click)="toggleLeftPanel()" title="Minimize to Dock">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+      </div>
+    </div>
+    
+    <app-agent-controls
+      [prUrl]="prUrl()"
+      [diffInput]="diffInput()"
+      [isAnalyzing]="isAnalyzing()"
+      [selectedProvider]="selectedProvider()"
+      [selectedModel]="selectedModel()"
+      [currentModelOptions]="currentModelOptions()"
+      [userApiKey]="userApiKey()"
+      [githubToken]="githubToken()"
+      [opts]="opts"
+      (prUrlChange)="prUrl.set($event)"
+      (fetchPrDiff)="fetchPrDiff()"
+      (selectedProviderChange)="selectedProvider.set($event)"
+      (selectedModelChange)="selectedModel.set($event)"
+      (providerChangeAction)="onProviderChange()"
+      (modelChangeAction)="onModelChange()"
+      (userApiKeyChange)="userApiKey.set($event)"
+      (saveSettings)="saveSettings()"
+      (githubTokenChange)="githubToken.set($event)"
+      (tokenInputChange)="onTokenInputChange($event)"
+      (loadExample)="loadExample()"
+      (startAnalysis)="startAnalysis()">
+    </app-agent-controls>
+
+    <!-- PIPELINE visibly glows when active -->
+    <div class="pipeline-section">
+      <app-pipeline-visualizer [nodeStates]="nodeStates()"></app-pipeline-visualizer>
+    </div>
+
+    <!-- HUMAN FEEDBACK UI -->
+    <app-human-feedback
+      [isAwaitingFeedback]="isAwaitingFeedback()"
+      [userFeedback]="userFeedback()"
+      (userFeedbackChange)="userFeedback.set($event)"
+      (submitFeedbackAction)="submitFeedback()">
+    </app-human-feedback>
+  </div>
+</div>
 

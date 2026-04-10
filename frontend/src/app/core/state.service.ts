@@ -27,6 +27,7 @@ export class GitMindStateService {
   analysisHistory = signal<any[]>([]); 
   dashboardMetrics = signal<DashboardMetrics | null>(null); 
   tabLoading = signal(false); 
+  tokensSaved = signal(0);
   
   // Human-in-the-loop signals
   threadId = signal<string | null>(null); 

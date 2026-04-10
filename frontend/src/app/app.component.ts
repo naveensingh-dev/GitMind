@@ -28,6 +28,7 @@ import { RawReportTabComponent } from './features/raw-report-tab/raw-report-tab.
 import { SidebarLayoutComponent } from './features/sidebar-layout/sidebar-layout.component';
 import { ReportHeaderComponent } from './features/report-header/report-header.component';
 import { TabsBarComponent } from './features/tabs-bar/tabs-bar.component';
+import { DraggableDirective } from './shared/directives/draggable.directive';
 
 import { GitMindStateService } from './core/state.service';
 
@@ -42,7 +43,7 @@ import {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, HeaderComponent, ActivityLogComponent, AnalyticsDashboardComponent, ReviewPanelComponent, DiffViewerComponent, SummaryTabComponent, PipelineVisualizerComponent, ThinkingLogsComponent, AutofixPanelComponent, TestsPanelComponent, AgentControlsComponent, OverlaysComponent, AnalysisHistoryComponent, HumanFeedbackComponent, ArchTabComponent, RawReportTabComponent, SidebarLayoutComponent, ReportHeaderComponent, TabsBarComponent],
+  imports: [CommonModule, FormsModule, HeaderComponent, ActivityLogComponent, AnalyticsDashboardComponent, ReviewPanelComponent, DiffViewerComponent, SummaryTabComponent, PipelineVisualizerComponent, ThinkingLogsComponent, AutofixPanelComponent, TestsPanelComponent, AgentControlsComponent, OverlaysComponent, AnalysisHistoryComponent, HumanFeedbackComponent, ArchTabComponent, RawReportTabComponent, SidebarLayoutComponent, ReportHeaderComponent, TabsBarComponent, DraggableDirective],
   templateUrl: './app.component.html',
 })
 export class App implements OnInit {
@@ -70,6 +71,7 @@ export class App implements OnInit {
   analysisHistory = this.state.analysisHistory;
   dashboardMetrics = this.state.dashboardMetrics;
   tabLoading = this.state.tabLoading;
+  tokensSaved = this.state.tokensSaved;
 
   isLeftPanelCollapsed = signal(false);
 
@@ -356,12 +358,20 @@ export class App implements OnInit {
     }
     this.apiService.getAnalysis(item.id).subscribe({
       next: (data) => {
+        // Only hydrate the diff if we have a real git diff (starts with 'diff --git')
+        if (data?.diff_text && data.diff_text.trim().startsWith('diff --git')) {
+          this.diffInput.set(data.diff_text);
+        } else {
+          // No real diff snapshot - reset so the UI stays clean
+          this.diffInput.set('');
+        }
+        
         if (data?.review_data) {
           this.analysisData.set(data.review_data);
           this.autoFixes.set(data.review_data.auto_fixes || null);
           this.generatedTests.set(data.review_data.generated_tests || null);
           this.archReview.set(data.review_data.arch_review || null);
-          this.currentTab.set('security');
+          this.currentTab.set('summary');
           this.appendLog('info', `📂 Loaded past analysis from ${new Date(data.created_at).toLocaleDateString()}`);
         }
       },
@@ -463,11 +473,15 @@ export class App implements OnInit {
   }
 
   handleAgentEvent(data: any) {
-    const { node, status, reviews, critique, auto_fixes, generated_tests, arch_review, refinement_count, monologue, message, thread_id } = data;
+    const { node, status, reviews, critique, auto_fixes, generated_tests, arch_review, refinement_count, tokens_saved, monologue, message, thread_id } = data;
 
     if (thread_id) {
       this.threadId.set(thread_id);
       return;
+    }
+
+    if (tokens_saved !== undefined && tokens_saved > 0) {
+      this.tokensSaved.set(tokens_saved);
     }
 
     if (node === 'error' || status === 'failed') {
@@ -626,6 +640,7 @@ export class App implements OnInit {
     this.isAwaitingFeedback.set(false);
     this.threadId.set(null);
     this.refinementCount.set(0);
+    this.tokensSaved.set(0);
     this.nodeStates.set({ input: '', multi_review: '', arbitrate: '', critique: '', human_review: '', refine: '', output: '' });
     // Route back to history if exists, otherwise clear tab
     this.currentTab.set(this.analysisHistory().length ? 'history' : 'diff');
@@ -811,7 +826,7 @@ export class App implements OnInit {
     if (fixes.length === 0) return;
 
     this.isPushingFixes.set(true);
-    const payload = fixes.map(f => ({ file_path: f.file_path, fixed_code: f.fixed_code, issue: f.issue }));
+    const payload = fixes.map(f => ({ file_path: f.file_path, original_code: f.item.line || '', fixed_code: f.fixed_code, issue: f.issue }));
 
     this.apiService.batchApplyFixes(githubUrl, token, payload).subscribe({
       next: (res) => {
@@ -840,7 +855,7 @@ export class App implements OnInit {
     }
 
     this.applyingFixFor.set(fix.file_path);
-    this.apiService.applyFix(githubUrl, fix.file_path, fix.fixed_code, token, fix.description).subscribe({
+    this.apiService.applyFix(githubUrl, fix.file_path, fix.original_code || '', fix.fixed_code, token, fix.description).subscribe({
       next: (res) => {
         this.successMessage.set(`Successfully applied patch to ${fix.file_path}!`);
         this.applyingFixFor.set(null);

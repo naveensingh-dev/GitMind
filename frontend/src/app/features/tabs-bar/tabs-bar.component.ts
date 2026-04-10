@@ -193,6 +193,7 @@ export class TabsBarComponent {
     }
     if (this.diffInput) {
       tabs.push({ id: 'diff', icon: '🔍', label: 'Diff', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });
+      tabs.push({ id: 'logs', icon: '📝', label: 'Logs', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });
     }
     return tabs;
   }
