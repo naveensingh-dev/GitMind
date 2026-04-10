@@ -235,10 +235,18 @@
         </div>
 
         <div class="tab-panels">
-          <!-- Diff Tab -->
-          <div class="tab-panel" [class.active]="currentTab() === 'diff'">
+          <!-- Skeleton loader shown during tab transitions -->
+          <div class="tab-skeleton" *ngIf="tabLoading()">
+            <div class="skeleton-pulse"></div>
+            <div class="skeleton-pulse short"></div>
+            <div class="skeleton-pulse"></div>
+            <div class="skeleton-pulse medium"></div>
+          </div>
+
+          <!-- Diff Tab — Lazy rendered -->
+          <div class="tab-panel active" *ngIf="currentTab() === 'diff'">
             <div class="diff-container">
-              <div *ngFor="let file of parsedFiles()" class="file-block" [id]="'file-' + file.path">
+              <div *ngFor="let file of parsedFiles(); trackBy: trackByPath" class="file-block" [id]="'file-' + file.path">
                 <div class="file-header" (click)="toggleFile(file)">
                   <span class="chevron" [class.open]="file.isOpen">▼</span>
                   <span class="file-path">{{ file.path }}</span>
@@ -249,9 +257,9 @@
                 </div>
                 
                 <div *ngIf="file.isOpen" class="file-content">
-                  <div *ngFor="let hunk of file.hunks" class="hunk">
+                  <div *ngFor="let hunk of file.hunks; trackBy: trackByIndex" class="hunk">
                     <div class="hunk-header">{{ hunk.header }}</div>
-                    <div *ngFor="let line of hunk.lines" [class]="'diff-line ' + line.type">
+                    <div *ngFor="let line of hunk.lines; trackBy: trackByIndex" [class]="'diff-line ' + line.type">
                       <div class="line-numbers">
                         <span class="num">{{ line.leftLine || '' }}</span>
                         <span class="num">{{ line.rightLine || '' }}</span>
@@ -264,14 +272,14 @@
             </div>
           </div>
 
-          <!-- Summary Panel -->
-          <div class="tab-panel" [class.active]="currentTab() === 'summary'">
-            <div class="approval-banner" [ngClass]="getApprovalInfo()?.cls">
-               <div class="approval-left">
-                 <div class="approval-icon">{{ getApprovalInfo()?.icon }}</div>
-                 <div>
-                   <div class="approval-title">{{ getApprovalInfo()?.label }}</div>
-                   <div class="approval-sub">{{ getApprovalInfo()?.sub }}</div>
+          <!-- Summary Tab — Lazy rendered -->
+          <div class="tab-panel active" *ngIf="currentTab() === 'summary'">
+            <div class="approval-strip" *ngIf="getApprovalInfo()">
+                <div class="approval-main">
+                  <span class="approval-icon">{{ getApprovalInfo()?.icon }}</span>
+                  <div>
+                    <div class="approval-title" [ngClass]="getApprovalInfo()?.cls">{{ getApprovalInfo()?.label }}</div>
+                    <div class="approval-sub">{{ getApprovalInfo()?.sub }}</div>
                  </div>
                </div>
                <div class="approval-score" *ngIf="analysisData()?.confidence_score">
@@ -313,10 +321,10 @@
             </div>
           </div>
           
-          <!-- Category Panels -->
-          <div class="tab-panel" [class.active]="currentTab() === 'security'">
+          <!-- Category Panels — Lazy rendered -->
+          <div class="tab-panel active" *ngIf="currentTab() === 'security'">
             <div *ngIf="analysisData()?.security?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No security issues found.</div>
-            <div *ngFor="let item of analysisData()?.security" class="review-card open">
+            <div *ngFor="let item of analysisData()?.security; trackBy: trackByIssue" class="review-card open">
               <div class="review-card-header">
                 <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
                 <span class="confidence-badge" [class.high]="item.confidence >= 90" [class.medium]="item.confidence >= 70 && item.confidence < 90" [class.low]="item.confidence < 70" *ngIf="item.confidence">🎯 {{ item.confidence }}%</span>
@@ -331,9 +339,9 @@
             </div>
           </div>
 
-          <div class="tab-panel" [class.active]="currentTab() === 'performance'">
+          <div class="tab-panel active" *ngIf="currentTab() === 'performance'">
             <div *ngIf="analysisData()?.performance?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No performance issues found.</div>
-            <div *ngFor="let item of analysisData()?.performance" class="review-card open">
+            <div *ngFor="let item of analysisData()?.performance; trackBy: trackByIssue" class="review-card open">
               <div class="review-card-header">
                 <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
                 <span class="confidence-badge" [class.high]="item.confidence >= 90" [class.medium]="item.confidence >= 70 && item.confidence < 90" [class.low]="item.confidence < 70" *ngIf="item.confidence">🎯 {{ item.confidence }}%</span>
@@ -348,9 +356,9 @@
             </div>
           </div>
 
-          <div class="tab-panel" [class.active]="currentTab() === 'style'">
+          <div class="tab-panel active" *ngIf="currentTab() === 'style'">
             <div *ngIf="analysisData()?.style?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No style issues found.</div>
-            <div *ngFor="let item of analysisData()?.style" class="review-card open">
+            <div *ngFor="let item of analysisData()?.style; trackBy: trackByIssue" class="review-card open">
               <div class="review-card-header">
                 <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
                 <span class="confidence-badge" [class.high]="item.confidence >= 90" [class.medium]="item.confidence >= 70 && item.confidence < 90" [class.low]="item.confidence < 70" *ngIf="item.confidence">🎯 {{ item.confidence }}%</span>
@@ -365,7 +373,7 @@
             </div>
           </div>
 
-          <div class="tab-panel" [class.active]="currentTab() === 'report'">
+          <div class="tab-panel active" *ngIf="currentTab() === 'report'">
             <!-- Report Actions Bar -->
             <div class="report-actions-bar">
               <div class="report-meta">

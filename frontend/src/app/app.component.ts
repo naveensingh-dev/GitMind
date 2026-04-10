@@ -75,6 +75,7 @@ export class App implements OnInit {
   successMessage = signal<string | null>(null); // User-facing success messages (e.g., after completion)
   selectedFilePath = signal<string | null>(null); // Path of the file currently selected in the tree
   analysisHistory = signal<any[]>([]); // Past analysis history from SQLite
+  tabLoading = signal(false); // True during tab switch rendering
   
   // Human-in-the-loop signals
   threadId = signal<string | null>(null); // LangGraph thread ID for session persistence
@@ -206,7 +207,7 @@ export class App implements OnInit {
         const pathMatch = line.match(/b\/(.+)$/);
         currentFile = {
           path: pathMatch ? pathMatch[1] : 'unknown',
-          additions: 0, deletions: 0, hunks: [], isOpen: true
+          additions: 0, deletions: 0, hunks: [], isOpen: false
         };
         files.push(currentFile);
         currentHunk = null;
@@ -229,6 +230,10 @@ export class App implements OnInit {
           currentHunk.lines.push({ content: line, type: 'neutral', leftLine: leftLine++, rightLine: rightLine++ });
         }
       }
+    }
+    // Auto-expand the first 3 files for quick visibility
+    for (let i = 0; i < Math.min(3, files.length); i++) {
+      files[i].isOpen = true;
     }
     return files;
   });
@@ -514,7 +519,29 @@ export class App implements OnInit {
   }
 
   switchTab(name: string) {
-    this.currentTab.set(name);
+    // Phase: Deferred tab switching — show loader, yield to browser, then update
+    if (this.currentTab() === name) return;
+    this.tabLoading.set(true);
+    this.currentTab.set('__loading__'); // Clear current tab to unmount heavy DOM
+    
+    // Use requestAnimationFrame to let the browser paint the skeleton first
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        this.currentTab.set(name);
+        this.tabLoading.set(false);
+      }, 40); // Small delay gives browser time to GC the old tab DOM
+    });
+  }
+
+  // trackBy functions to prevent DOM thrashing
+  trackByPath(index: number, file: DiffFile): string {
+    return file.path;
+  }
+  trackByIndex(index: number): number {
+    return index;
+  }
+  trackByIssue(index: number, item: ReviewItem): string {
+    return (item.file_path || '') + ':' + (item.line_number || index) + ':' + item.issue.slice(0, 30);
   }
 
   getApprovalInfo() {
@@ -626,17 +653,34 @@ export class App implements OnInit {
     }, 100);
   }
 
+  // Highlight cache to prevent re-running hljs.highlightAuto on every render
+  private _highlightCache = new Map<string, SafeHtml>();
+  private _highlightCacheMax = 3000; // Evict cache after this many entries
+
   highlightCode(code: string): SafeHtml {
     if (!code) return '';
+    
+    // Check cache first
+    const cached = this._highlightCache.get(code);
+    if (cached) return cached;
+    
+    let result: SafeHtml;
     try {
       const highlighted = hljs.highlightAuto(code).value;
       const cleanHtml = DOMPurify.sanitize(highlighted);
-      return this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
+      result = this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
     } catch (e) {
       // Fallback if highlight fails
       const cleanHtml = DOMPurify.sanitize(code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-      return this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
+      result = this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
     }
+    
+    // Evict cache if too large
+    if (this._highlightCache.size >= this._highlightCacheMax) {
+      this._highlightCache.clear();
+    }
+    this._highlightCache.set(code, result);
+    return result;
   }
 }
 
