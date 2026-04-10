@@ -34,6 +34,8 @@ from github_context import fetch_pr_comments
 from auto_fix import AutoFixReport, AUTO_FIX_PROMPT
 from test_gen import GeneratedTestSuite, TEST_GEN_PROMPT
 from arch_review import ArchReview, ARCH_REVIEW_PROMPT
+from history import get_suppressed_issues
+import re
 
 # Load environment variables from .env
 load_dotenv()
@@ -303,14 +305,31 @@ async def arbitrate_node(state: AgentState):
     
     response, used_model = await invoke_llm(ReviewReport, state, messages)
     
-    # Count merged stats
-    total = len(response.security) + len(response.performance) + len(response.style)
+    # Count merged stats before filtering
+    original_total = len(response.security) + len(response.performance) + len(response.style)
+    
+    # ── PHASE 2: LONG-TERM MEMORY FILTERING ──
+    repo_match = re.search(r"github\.com/([^/]+/[^/]+)", state.github_url or "")
+    if repo_match:
+        repo = repo_match.group(1)
+        suppressed = get_suppressed_issues(repo)
+        
+        if suppressed:
+            # Filter matches exact issue text
+            response.security = [item for item in response.security if item.issue not in suppressed]
+            response.performance = [item for item in response.performance if item.issue not in suppressed]
+            response.style = [item for item in response.style if item.issue not in suppressed]
+            
+    filtered_total = len(response.security) + len(response.performance) + len(response.style)
+    filtered_msg = ""
+    if original_total > filtered_total:
+        filtered_msg = f" 🗑️ Filtered {original_total - filtered_total} issue(s) based on team memory preferences."
     
     return {
         "reviews": response, 
         "status": "arbitrate_complete",
         "monologue": [
-            f"🔀 Arbitration complete — merged {len(passes)} passes into {total} unique finding(s).",
+            f"🔀 Arbitration complete — merged {len(passes)} passes into {original_total} unique finding(s).{filtered_msg}",
             f"📊 Final confidence score: {response.confidence_score}%"
         ]
     }

@@ -8,6 +8,60 @@
   (clearSuccessAction)="clearSuccess()">
 </app-overlays>
 
+<!-- ✨ STAGED FIXES FLOATING BANNER -->
+<div *ngIf="stagedFixes().length > 0"
+     style="
+       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+       z-index: 9999;
+       display: flex; align-items: center; gap: 16px;
+       background: rgba(10,12,20,0.95);
+       border: 1px solid rgba(0,255,163,0.3);
+       border-radius: 14px;
+       padding: 14px 22px;
+       backdrop-filter: blur(16px);
+       box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,255,163,0.1);
+       min-width: 340px; max-width: 600px;
+       animation: slideUp 0.25s ease;">
+
+  <!-- Count pill -->
+  <span style="display:flex; align-items:center; gap:8px;">
+    <span style="font-size:22px;">📦</span>
+    <span style="font-size:14px; font-weight:700; color:#fff;">
+      {{ stagedFixes().length }} fix{{ stagedFixes().length === 1 ? '' : 'es' }} staged
+    </span>
+    <span style="font-size:11px; color:#888; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+      — {{ stagedFixes().slice(0,2).map(f => f.file_path.split('/').pop()).join(', ') }}{{ stagedFixes().length > 2 ? '…' : '' }}
+    </span>
+  </span>
+
+  <div style="flex:1"></div>
+
+  <!-- Push button -->
+  <button
+    (click)="pushStagedFixes()"
+    [disabled]="isPushingFixes()"
+    style="
+      display: flex; align-items: center; gap: 8px;
+      background: linear-gradient(135deg, #00ffa3, #00c87a);
+      color: #000; font-weight: 800; font-size: 13px;
+      border: none; border-radius: 8px; padding: 10px 20px;
+      cursor: pointer; transition: opacity 0.2s;
+      white-space: nowrap;"
+    [style.opacity]="isPushingFixes() ? '0.6' : '1'">
+    <span *ngIf="!isPushingFixes()">🚀 Push Commit to GitHub</span>
+    <span *ngIf="isPushingFixes()">⏳ Pushing…</span>
+  </button>
+
+  <!-- Clear cart -->
+  <button
+    (click)="stagedFixes.set([])"
+    [disabled]="isPushingFixes()"
+    title="Clear all staged fixes"
+    style="background:transparent; border:1px solid #444; color:#888; border-radius:6px; padding:6px 10px; cursor:pointer; font-size:12px;">
+    ✕
+  </button>
+</div>
+
 <!-- APP -->
 <div class="app" [class.no-sidebar]="!diffInput()" [class.left-panel-collapsed]="isLeftPanelCollapsed()">
   <app-sidebar-layout
@@ -162,7 +216,15 @@
           
           <!-- Category Panels — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'security'">
-            <app-review-panel *ngIf="analysisData()?.security?.length" [items]="analysisData()?.security || []" [categoryName]="'Security'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <app-review-panel
+              *ngIf="analysisData()?.security?.length"
+              [items]="analysisData()?.security || []"
+              [categoryName]="'Security'"
+              [stagedItems]="stagedItems()"
+              (pushToGithub)="pushToGithub($event)"
+              (toggleStage)="isStagedFix($event) ? unstageFix($event) : stageFix($event)"
+              (dismissItem)="dismissIssue($event, 'security')">
+            </app-review-panel>
             <div class="empty-state" *ngIf="!analysisData()?.security?.length">
               <div class="empty-icon">🛡️</div>
               <div class="empty-text">No security issues detected!</div>
@@ -170,7 +232,15 @@
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'performance'">
-            <app-review-panel *ngIf="analysisData()?.performance?.length" [items]="analysisData()?.performance || []" [categoryName]="'Performance'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <app-review-panel
+              *ngIf="analysisData()?.performance?.length"
+              [items]="analysisData()?.performance || []"
+              [categoryName]="'Performance'"
+              [stagedItems]="stagedItems()"
+              (pushToGithub)="pushToGithub($event)"
+              (toggleStage)="isStagedFix($event) ? unstageFix($event) : stageFix($event)"
+              (dismissItem)="dismissIssue($event, 'performance')">
+            </app-review-panel>
             <div class="empty-state" *ngIf="!analysisData()?.performance?.length">
               <div class="empty-icon">⚡</div>
               <div class="empty-text">No performance issues detected!</div>
@@ -178,7 +248,15 @@
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'style'">
-            <app-review-panel *ngIf="analysisData()?.style?.length" [items]="analysisData()?.style || []" [categoryName]="'Style'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
+            <app-review-panel
+              *ngIf="analysisData()?.style?.length"
+              [items]="analysisData()?.style || []"
+              [categoryName]="'Style'"
+              [stagedItems]="stagedItems()"
+              (pushToGithub)="pushToGithub($event)"
+              (toggleStage)="isStagedFix($event) ? unstageFix($event) : stageFix($event)"
+              (dismissItem)="dismissIssue($event, 'style')">
+            </app-review-panel>
             <div class="empty-state" *ngIf="!analysisData()?.style?.length">
               <div class="empty-icon">✨</div>
               <div class="empty-text">No code style issues found!</div>

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from agent import app_graph, fetch_github_diff_text
 from schemas import AgentState, ReviewItem, ReviewReport
 from pydantic import BaseModel
-from history import save_analysis, get_history, get_analysis_by_id
+from history import save_analysis, get_history, get_analysis_by_id, add_suppression
 
 app = FastAPI(title="GitMind API")
 
@@ -335,12 +335,13 @@ async def apply_fix(request: Request):
     if not all([github_url, github_token, file_path, fixed_code]):
         raise HTTPException(status_code=400, detail="Missing required parameters")
         
-    # Match PR URL: github.com/owner/repo/pull/number
-    pr_match = re.search(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)", github_url)
-    if not pr_match:
-        raise HTTPException(status_code=400, detail="Must be a Pull Request URL")
-        
-    owner, repo, pr_number = pr_match.groups()
+    owner, repo, pr_number, commit_sha = parse_github_url(github_url)
+    
+    if not owner or not repo:
+        raise HTTPException(status_code=400, detail="Invalid GitHub URL provided.")
+    
+    if not pr_number:
+        raise HTTPException(status_code=400, detail="Cannot apply fix: Please provide a Pull Request URL (not a Commit URL) so GitMind knows which branch to push to.")
     
     headers = {
         "Authorization": f"token {github_token}",
@@ -378,9 +379,130 @@ async def apply_fix(request: Request):
         
         update_res = await client.put(update_url, headers=headers, json=payload)
         if update_res.status_code not in (200, 201):
-            raise HTTPException(status_code=400, detail=f"Failed to commit fix: {update_res.text}")
+            raise HTTPException(status_code=400, detail=f"Failed to push commit: {update_res.text}")
             
-        return {"status": "success", "commit_url": update_res.json().get("commit", {}).get("html_url")}
+        return {"message": "Fix applied successfully", "commit_url": update_res.json().get("commit", {}).get("html_url")}
+
+@app.post("/batch-apply-fixes")
+async def batch_apply_fixes(request: Request):
+    """Pushes an array of code patches to the GitHub PR branch as a single batch commit."""
+    import base64
+    import re
+    data = await request.json()
+    github_url = data.get("github_url")
+    github_token = data.get("github_token")
+    fixes = data.get("fixes", []) # List of { file_path, fixed_code, issue }
+    
+    if not all([github_url, github_token]) or not fixes:
+        raise HTTPException(status_code=400, detail="Missing required parameters or empty fixes array")
+        
+    owner, repo, pr_number, commit_sha = parse_github_url(github_url)
+    
+    if not owner or not repo:
+        raise HTTPException(status_code=400, detail="Invalid GitHub URL provided.")
+    if not pr_number:
+        raise HTTPException(status_code=400, detail="Cannot apply batch fix: Please provide a Pull Request URL.")
+    
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # 1. Fetch PR details for branch name
+        pr_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+        pr_res = await client.get(pr_url, headers=headers)
+        if pr_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch PR details")
+            
+        branch = pr_res.json().get("head", {}).get("ref")
+        if not branch:
+            raise HTTPException(status_code=400, detail="Could not find PR branch")
+            
+        # 2. Get latest commit SHA for the branch exactly
+        branch_url = f"https://api.github.com/repos/{owner}/{repo}/git/ref/heads/{branch}"
+        branch_res = await client.get(branch_url, headers=headers)
+        if branch_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch branch details")
+        latest_commit_sha = branch_res.json().get("object", {}).get("sha")
+        
+        # 3. Get the base tree SHA
+        commit_url = f"https://api.github.com/repos/{owner}/{repo}/git/commits/{latest_commit_sha}"
+        commit_res = await client.get(commit_url, headers=headers)
+        base_tree_sha = commit_res.json().get("tree", {}).get("sha")
+        
+        # 4. Create a blob for each fixed file
+        tree_elements = []
+        for fix in fixes:
+            blob_url = f"https://api.github.com/repos/{owner}/{repo}/git/blobs"
+            encoded = base64.b64encode(fix["fixed_code"].encode("utf-8")).decode("utf-8")
+            blob_payload = {"content": encoded, "encoding": "base64"}
+            blob_res = await client.post(blob_url, headers=headers, json=blob_payload)
+            if blob_res.status_code != 201:
+                raise HTTPException(status_code=400, detail=f"Failed to create blob for {fix['file_path']}")
+            
+            blob_sha = blob_res.json().get("sha")
+            tree_elements.append({
+                "path": fix["file_path"],
+                "mode": "100644",
+                "type": "blob",
+                "sha": blob_sha
+            })
+            
+        # 5. Create a new Tree referencing the base tree + new blobs
+        tree_url = f"https://api.github.com/repos/{owner}/{repo}/git/trees"
+        tree_payload = {"base_tree": base_tree_sha, "tree": tree_elements}
+        tree_res = await client.post(tree_url, headers=headers, json=tree_payload)
+        if tree_res.status_code != 201:
+            raise HTTPException(status_code=400, detail="Failed to create git tree containing updates")
+        new_tree_sha = tree_res.json().get("sha")
+        
+        # 6. Create the Commit dynamically summarizing the actions
+        commit_msg = f"Auto-Fix: Resolved {len(fixes)} issue(s)\n\n"
+        for fix in fixes:
+             commit_msg += f"- {fix['file_path']}: {fix.get('issue', 'Applied automatic fix')}\n"
+             
+        commit_url_post = f"https://api.github.com/repos/{owner}/{repo}/git/commits"
+        commit_payload = {
+            "message": commit_msg,
+            "tree": new_tree_sha,
+            "parents": [latest_commit_sha]
+        }
+        create_commit_res = await client.post(commit_url_post, headers=headers, json=commit_payload)
+        if create_commit_res.status_code != 201:
+            raise HTTPException(status_code=400, detail="Failed to create git commit")
+        new_commit_sha = create_commit_res.json().get("sha")
+        html_url = create_commit_res.json().get("html_url")
+        
+        # 7. Update Branch Ref to point to new commit
+        update_ref_payload = {"sha": new_commit_sha, "force": False}
+        update_ref_res = await client.patch(branch_url, headers=headers, json=update_ref_payload)
+        if update_ref_res.status_code not in (200, 201):
+            raise HTTPException(status_code=400, detail=f"Failed to update branch reference: {update_ref_res.text}")
+            
+        return {"message": f"Successfully batched {len(fixes)} fixes! 🚀", "commit_url": html_url}
+
+@app.post("/suppress-issue")
+async def suppress_issue(request: Request):
+    """Adds a specific issue signature to the repo memory, so GitMind won't report it again."""
+    data = await request.json()
+    github_url = data.get("github_url")
+    issue_signature = data.get("issue_signature")
+    
+    if not github_url or not issue_signature:
+        raise HTTPException(status_code=400, detail="Missing github_url or issue_signature")
+        
+    owner, repo, _, _ = parse_github_url(github_url)
+    if not repo:
+        raise HTTPException(status_code=400, detail="Invalid GitHub URL")
+        
+    repo_full_name = f"{owner}/{repo}"
+    success = add_suppression(repo_full_name, issue_signature)
+    
+    if success:
+        return {"message": "Issue dismissed successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save suppression")
 
 @app.get("/history")
 async def analysis_history(repo: str = None, limit: int = 20):

@@ -1,15 +1,22 @@
 <div *ngIf="items?.length === 0" class="placeholder-text" style="padding: 40px;">
   ✓ No {{ categoryName }} issues found.
 </div>
-<div *ngFor="let item of items; trackBy: trackByItem" class="review-card open">
+<div *ngFor="let item of items; trackBy: trackByItem"
+     class="review-card open"
+     [class.is-staged]="isStaged(item)">
   <div class="review-card-header">
     <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
-    <span class="confidence-badge" 
-          [class.high]="(item.confidence || 0) >= 90" 
-          [class.medium]="(item.confidence || 0) >= 70 && (item.confidence || 0) < 90" 
-          [class.low]="(item.confidence || 0) < 70" 
+    <span class="confidence-badge"
+          [class.high]="(item.confidence || 0) >= 90"
+          [class.medium]="(item.confidence || 0) >= 70 && (item.confidence || 0) < 90"
+          [class.low]="(item.confidence || 0) < 70"
           *ngIf="item.confidence">
       🎯 {{ item.confidence }}%
+    </span>
+    <!-- Staged indicator badge -->
+    <span *ngIf="isStaged(item)"
+          style="font-size:10px; background: rgba(0,255,163,0.15); color:#00ffa3; border:1px solid rgba(0,255,163,0.3); border-radius:20px; padding:2px 8px; font-weight:700; letter-spacing:0.04em;">
+      ✓ STAGED
     </span>
     <span class="card-issue">{{ item.issue }}</span>
     <button class="push-github-btn" (click)="onPushToGithub(item)">Push Suggestion ↗</button>
@@ -18,5 +25,28 @@
     <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
     <div class="fix-label">💡 Suggested fix (Editable):</div>
     <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
+
+    <!-- Action Bar -->
+    <div class="action-bar" style="display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap;">
+      <!-- Stage / Unstage toggle -->
+      <button
+        [style.background]="isStaged(item) ? 'linear-gradient(135deg,rgba(248,113,113,0.12),rgba(248,113,113,0.06))' : 'linear-gradient(135deg,rgba(0,255,163,0.12),rgba(0,255,163,0.06))'"
+        [style.color]="isStaged(item) ? '#f87171' : '#00ffa3'"
+        [style.border-color]="isStaged(item) ? 'rgba(248,113,113,0.35)' : 'rgba(0,255,163,0.35)'"
+        class="push-github-btn"
+        (click)="onToggleStage(item)"
+        [title]="isStaged(item) ? 'Remove from commit batch' : 'Add this fix to the commit batch'">
+        {{ isStaged(item) ? '➖ Unstage Fix' : '➕ Stage Fix' }}
+      </button>
+
+      <div style="flex:1"></div>
+
+      <button class="dismiss-btn"
+              style="background: transparent; color: #888; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer;"
+              (click)="onDismiss(item)"
+              title="Hide this issue forever for this repository">
+        🗑️ Dismiss
+      </button>
+    </div>
   </div>
 </div>
