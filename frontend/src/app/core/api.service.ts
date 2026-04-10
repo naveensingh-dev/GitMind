@@ -56,6 +56,21 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/apply-fix`, payload);
   }
 
+  suppressIssue(githubUrl: string, issueSignature: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/suppress-issue`, {
+      github_url: githubUrl,
+      issue_signature: issueSignature
+    });
+  }
+
+  batchApplyFixes(githubUrl: string, token: string, fixes: { file_path: string; fixed_code: string; issue: string }[]): Observable<any> {
+    return this.http.post(`${this.baseUrl}/batch-apply-fixes`, {
+      github_url: githubUrl,
+      github_token: token,
+      fixes
+    });
+  }
+
   private createSseObservable(url: string, payload: any): Observable<string> {
     return new Observable(observer => {
       const abortController = new AbortController();

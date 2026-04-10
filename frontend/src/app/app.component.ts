@@ -89,6 +89,11 @@ export class App implements OnInit {
   githubTokenInput = '';
   githubToken = this.state.githubToken;
 
+  // --- STAGING CART ---
+  stagedFixes = signal<{ file_path: string; fixed_code: string; issue: string; item: ReviewItem }[]>([]);
+  stagedItems = computed(() => this.stagedFixes().map(f => f.item));
+  isPushingFixes = signal(false);
+
   appendLog(type: LogEntry['type'], msg: string) {
     this.state.appendLog(type, msg);
   }
@@ -722,6 +727,97 @@ export class App implements OnInit {
 
   // --- PHASE 3: APPLY FIX ---
   applyingFixFor = signal<string | null>(null);
+
+  triggerCardAutoFix(item: ReviewItem) {
+    if (!item.file_path) {
+      this.errorMessage.set("Cannot apply fix: No file path associated with this review item.");
+      return;
+    }
+    const fixPayload = {
+      file_path: item.file_path,
+      fixed_code: item.fix,
+      description: `Auto-Fix for: ${item.issue}`,
+      is_safe: item.severity !== 'high' // Require warning for high severity
+    };
+    this.applyFix(fixPayload);
+  }
+
+  dismissIssue(item: ReviewItem, category: 'security' | 'performance' | 'style') {
+    const githubUrl = this.prUrl();
+    if (!githubUrl || !item.issue) return;
+    
+    // Optimistically remove from UI
+    const currentData = this.analysisData();
+    if (currentData && currentData[category]) {
+      const updatedList = currentData[category].filter(i => i.issue !== item.issue);
+      this.analysisData.set({
+        ...currentData,
+        [category]: updatedList
+      });
+      this.successMessage.set("Issue dismissed and hidden for future runs on this repo.");
+    }
+    
+    // Send to backend to persist
+    this.apiService.suppressIssue(githubUrl, item.issue).subscribe({
+      error: () => this.errorMessage.set("Failed to save suppression to backend.")
+    });
+  }
+
+  stageFix(item: ReviewItem) {
+    const filePath = item.file_path;
+    const issueText = item.issue;
+    if (!filePath || !issueText) {
+      this.errorMessage.set("Cannot stage fix: missing file path or issue text.");
+      return;
+    }
+    // Deduplicate — replace if already staged for same file+issue
+    this.stagedFixes.update(current => [
+      ...current.filter(f => !(f.file_path === filePath && f.issue === issueText)),
+      { file_path: filePath, fixed_code: item.fix, issue: issueText, item }
+    ]);
+  }
+
+  unstageFix(item: ReviewItem) {
+    const filePath = item.file_path;
+    const issueText = item.issue;
+    if (!filePath || !issueText) return;
+
+    this.stagedFixes.update(current =>
+      current.filter(f => !(f.file_path === filePath && f.issue === issueText))
+    );
+  }
+
+  isStagedFix(item: ReviewItem): boolean {
+    return this.stagedFixes().some(f => f.file_path === item.file_path && f.issue === item.issue);
+  }
+
+  pushStagedFixes() {
+    const githubUrl = this.prUrl();
+    const token = this.githubToken();
+    const fixes = this.stagedFixes();
+
+    if (!githubUrl || !token) {
+      this.errorMessage.set("GitHub URL and Token are required to push fixes.");
+      return;
+    }
+    if (fixes.length === 0) return;
+
+    this.isPushingFixes.set(true);
+    const payload = fixes.map(f => ({ file_path: f.file_path, fixed_code: f.fixed_code, issue: f.issue }));
+
+    this.apiService.batchApplyFixes(githubUrl, token, payload).subscribe({
+      next: (res) => {
+        this.successMessage.set(`✅ Pushed ${fixes.length} fix(es) as one commit!`);
+        this.stagedFixes.set([]);      // clear the cart
+        this.isPushingFixes.set(false);
+        if (res.commit_url) window.open(res.commit_url, '_blank');
+      },
+      error: (err) => {
+        this.errorMessage.set(`Failed to push fixes: ${err.error?.detail || err.message}`);
+        this.isPushingFixes.set(false);
+      }
+    });
+  }
 
   applyFix(fix: any) {
     const githubUrl = this.prUrl();

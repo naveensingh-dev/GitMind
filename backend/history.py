@@ -35,8 +35,47 @@ def _get_connection() -> sqlite3.Connection:
             created_at TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS repo_memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo TEXT NOT NULL,
+            issue_signature TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(repo, issue_signature)
+        )
+    """)
     conn.commit()
     return conn
+
+def add_suppression(repo: str, issue_signature: str) -> bool:
+    """Adds a suppressed issue to the repo's long-term memory."""
+    conn = _get_connection()
+    try:
+        conn.execute("""
+            INSERT OR REPLACE INTO repo_memory (repo, issue_signature, status, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (repo, issue_signature, "dismissed", datetime.now(timezone.utc).isoformat()))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error saving suppression: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_suppressed_issues(repo: str) -> List[str]:
+    """Returns a list of issue signatures that were dismissed for a repo."""
+    conn = _get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT issue_signature FROM repo_memory WHERE repo = ? AND status = 'dismissed'",
+            (repo,)
+        ).fetchall()
+        return [row["issue_signature"] for row in rows]
+    finally:
+        conn.close()
+
 
 
 def save_analysis(

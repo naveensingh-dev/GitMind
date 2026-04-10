@@ -421,6 +421,12 @@ header{
 }
 .log-line{display:flex;gap:10px;animation:slideIn 0.2s ease-out}
 @keyframes slideIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+/* Staged card subtle glow */
+.review-card.is-staged{
+  border-color: rgba(0,255,163,0.25) !important;
+  box-shadow: 0 0 0 1px rgba(0,255,163,0.1), inset 0 0 20px rgba(0,255,163,0.03);
+}
 .log-time{color:var(--text3);flex-shrink:0}
 .log-msg{flex:1}
 .log-msg.info{color:var(--text2)}
