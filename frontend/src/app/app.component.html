@@ -153,9 +153,9 @@
           <div class="node-circle"><div class="node-spin"></div><span>📥</span></div>
           <div class="node-label">Parse</div>
         </div>
-        <div class="pipe-node" [class]="nodeStates()['dual_review']">
+        <div class="pipe-node" [class]="nodeStates()['multi_review']">
           <div class="node-circle"><div class="node-spin"></div><span>🔍</span></div>
-          <div class="node-label">Dual<br>Review</div>
+          <div class="node-label">Multi<br>Review</div>
         </div>
         <div class="pipe-node" [class]="nodeStates()['arbitrate']">
           <div class="node-circle"><div class="node-spin"></div><span>🔀</span></div>
@@ -243,7 +243,8 @@
         </div>
 
         <div class="tabs-bar" *ngIf="!isAnalyzing() || analysisData()">
-          <div class="tab" [class.active]="currentTab() === 'diff'" (click)="switchTab('diff')">🔍 Diff</div>
+          <div class="tab" [class.active]="currentTab() === 'diff'" (click)="switchTab('diff')" *ngIf="diffInput()">🔍 Diff</div>
+          <div class="tab" [class.active]="currentTab() === 'analytics'" (click)="switchTab('analytics')" *ngIf="dashboardMetrics()">📊 Analytics</div>
           <div class="tab" [class.active]="currentTab() === 'summary'" (click)="switchTab('summary')" *ngIf="analysisData()">📋 Summary</div>
           <div class="tab" [class.active]="currentTab() === 'security'" (click)="switchTab('security')" *ngIf="analysisData()">🔐 Security</div>
           <div class="tab" [class.active]="currentTab() === 'performance'" (click)="switchTab('performance')" *ngIf="analysisData()">⚡ Performance</div>
@@ -262,6 +263,48 @@
             <div class="skeleton-pulse"></div>
             <div class="skeleton-pulse medium"></div>
           </div>
+
+          <!-- Analytics Dashboard Tab -->
+          <div class="tab-panel active" *ngIf="currentTab() === 'analytics' && dashboardMetrics()">
+            <div class="analytics-header">
+              <h2>GitMind Intelligence Dashboard</h2>
+              <p>Aggregate insights across the repository's analysis history.</p>
+            </div>
+            
+            <div class="kpi-grid">
+              <div class="kpi-card">
+                <span class="kpi-value">{{ dashboardMetrics().totalReviews }}</span>
+                <span class="kpi-label">Reviews Run</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-value text-red">{{ dashboardMetrics().highSev }}</span>
+                <span class="kpi-label">High-Severity Findings</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-value text-purple">{{ dashboardMetrics().totalThreats }}</span>
+                <span class="kpi-label">Total Code Smells Blocked</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-value">{{ dashboardMetrics().avgConf }}%</span>
+                <span class="kpi-label">Avg AI Confidence</span>
+              </div>
+            </div>
+
+            <div class="chart-section">
+              <h3>Findings Distribution</h3>
+              <div class="stacked-bar">
+                <div class="bar-segment sec" [style.width.%]="dashboardMetrics().secPct" title="Security: {{ dashboardMetrics().sumSec }}"></div>
+                <div class="bar-segment perf" [style.width.%]="dashboardMetrics().perfPct" title="Performance: {{ dashboardMetrics().sumPerf }}"></div>
+                <div class="bar-segment style" [style.width.%]="dashboardMetrics().stylePct" title="Style: {{ dashboardMetrics().sumStyle }}"></div>
+              </div>
+              <div class="legend">
+                <span><span class="dot sec"></span>Security ({{ dashboardMetrics().sumSec }})</span>
+                <span><span class="dot perf"></span>Performance ({{ dashboardMetrics().sumPerf }})</span>
+                <span><span class="dot style"></span>Style ({{ dashboardMetrics().sumStyle }})</span>
+              </div>
+            </div>
+          </div>
+
 
           <!-- Diff Tab — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'diff'">

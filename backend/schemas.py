@@ -48,9 +48,8 @@ class AgentState(BaseModel):
     severity_threshold: str = "low"          # low, medium, or high
     custom_instructions: Optional[str] = None
     
-    # Internal state — dual-pass review storage
-    review_pass_1: Optional[ReviewReport] = None  # Security-focused pass
-    review_pass_2: Optional[ReviewReport] = None  # Quality-focused pass
+    # Internal state — multi-pass review storage
+    review_passes: List[ReviewReport] = Field(default_factory=list)
     reviews: Optional[ReviewReport] = None         # Arbitrated/merged final result
     
     # Phase 3: Capabilities Expansion

@@ -21,8 +21,9 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
 from schemas import ReviewReport, CritiqueResult, AgentState
 from prompts import (
     REVIEWER_SYSTEM_PROMPT,
-    SECURITY_REVIEWER_PROMPT,
-    QUALITY_REVIEWER_PROMPT,
+    PERSONA_SECURITY,
+    PERSONA_PERFORMANCE,
+    PERSONA_STYLE,
     ARBITRATOR_PROMPT,
     CRITIQUE_SYSTEM_PROMPT,
     REFINEMENT_SYSTEM_PROMPT,
@@ -196,14 +197,12 @@ async def input_parse_node(state: AgentState):
     return updates
 
 
-async def dual_review_node(state: AgentState):
+async def multi_review_node(state: AgentState):
     """
-    Dual-Pass Review Node: Runs two independent, concurrent review passes.
-    Pass 1 — Security-focused (paranoid auditor perspective)
-    Pass 2 — Quality-focused (performance engineer perspective)
-    Both run in parallel via asyncio.gather for speed.
+    Multi-Review Persona Node (Phase 4.1): Runs fully independent, customized 
+    concurrent review passes based on .gitmind.yaml's "focus" configuration.
     """
-    print("Node: dual_review_node")
+    print("Node: multi_review_node")
     if not state.diff: 
         return {"status": "failed", "monologue": ["✗ No diff found to review."]}
     
@@ -215,102 +214,89 @@ async def dual_review_node(state: AgentState):
         extra_context += f"\n\nPROJECT-SPECIFIC INSTRUCTIONS FROM .gitmind.yaml:\n{state.custom_instructions}\n"
     if state.pr_context:
         extra_context += f"\n\n{state.pr_context}\n"
+        
+    config = state.repo_config or {}
+    focus_areas = config.get("focus", ["security", "performance", "style"])
+    if not focus_areas:
+        focus_areas = ["security", "performance", "style"]
+        
+    persona_prompts = {
+        "security": PERSONA_SECURITY,
+        "performance": PERSONA_PERFORMANCE,
+        "style": PERSONA_STYLE
+    }
     
-    # Build messages for each pass
-    security_messages = [
-        SystemMessage(content=SECURITY_REVIEWER_PROMPT + extra_context),
-        HumanMessage(content=f"Review this PR diff for security vulnerabilities ONLY:\n\n{diff_content}")
-    ]
-    
-    quality_messages = [
-        SystemMessage(content=QUALITY_REVIEWER_PROMPT + extra_context),
-        HumanMessage(content=f"Review this PR diff for performance, quality, and style issues ONLY:\n\n{diff_content}")
-    ]
-    
+    tasks = []
     monologue = []
+    monologue.append(f"🔍 Launching dynamic multi-persona review for: {', '.join(focus_areas)}...")
     
-    # Run both passes concurrently
+    for focus in focus_areas:
+        if focus in persona_prompts:
+            messages = [
+                SystemMessage(content=persona_prompts[focus] + extra_context),
+                HumanMessage(content=f"Review this PR diff for {focus} issues ONLY:\n\n{diff_content}")
+            ]
+            tasks.append(invoke_llm(ReviewReport, state, messages))
+
+    if not tasks:
+        # Fallback if config is weird
+        messages = [
+            SystemMessage(content=persona_prompts["security"] + extra_context),
+            HumanMessage(content=f"Review this PR diff:\n\n{diff_content}")
+        ]
+        tasks.append(invoke_llm(ReviewReport, state, messages))
+    
     try:
-        monologue.append("🔍 Launching dual-perspective review (Security + Quality passes)...")
-        pass_1_result, pass_2_result = await asyncio.gather(
-            invoke_llm(ReviewReport, state, security_messages),
-            invoke_llm(ReviewReport, state, quality_messages),
-        )
-        
-        review_1, model_1 = pass_1_result
-        review_2, model_2 = pass_2_result
-        
-        sec_count = len(review_1.security) + len(review_1.performance) + len(review_1.style)
-        qual_count = len(review_2.security) + len(review_2.performance) + len(review_2.style)
-        
-        monologue.append(f"🔐 Security pass completed — found {sec_count} finding(s) using {model_1}.")
-        monologue.append(f"⚡ Quality pass completed — found {qual_count} finding(s) using {model_2}.")
-        
+        results = await asyncio.gather(*tasks)
+        passes = []
+        selected_model = None
+        for i, (report, model_used) in enumerate(results):
+            passes.append(report)
+            selected_model = model_used
+            
+            # Add to monologue
+            focus_name = focus_areas[i].capitalize() if i < len(focus_areas) else "Fallback"
+            count = len(report.security) + len(report.performance) + len(report.style)
+            monologue.append(f"✓ \"The {focus_name}\" persona completed — found {count} finding(s) using {model_used}.")
+            
         return {
-            "review_pass_1": review_1,
-            "review_pass_2": review_2,
-            "selected_model": model_1,
-            "status": "dual_review_complete",
+            "review_passes": passes,
+            "selected_model": selected_model,
+            "status": "multi_review_complete",
             "monologue": monologue,
         }
     except Exception as e:
-        # If parallel fails (e.g., rate limit), try sequential fallback
-        monologue.append(f"⚠️ Parallel review failed ({str(e)[:60]}...), falling back to sequential...")
-        
-        try:
-            review_1, model_1 = await invoke_llm(ReviewReport, state, security_messages)
-            monologue.append(f"🔐 Security pass completed using {model_1}.")
-        except Exception as e1:
-            raise e1
-        
-        try:
-            review_2, model_2 = await invoke_llm(ReviewReport, state, quality_messages)
-            monologue.append(f"⚡ Quality pass completed using {model_2}.")
-        except Exception as e2:
-            raise e2
-        
-        return {
-            "review_pass_1": review_1,
-            "review_pass_2": review_2,
-            "selected_model": model_1,
-            "status": "dual_review_complete",
-            "monologue": monologue,
-        }
+        monologue.append(f"⚠️ Multi-persona review failed ({str(e)[:60]}...).")
+        raise e
 
 
 async def arbitrate_node(state: AgentState):
     """
-    Arbitrator Node: Merges findings from both review passes into a single
-    unified ReviewReport. Deduplicates issues, assigns cross-pass confidence
-    scores, and removes hallucinated findings.
+    Arbitrator Node: Merges findings from ALL dynamic review passes into a single
+    unified ReviewReport. Deduplicates issues and assigns confidence scores.
     """
     print("Node: arbitrate_node")
     
-    pass_1 = state.review_pass_1
-    pass_2 = state.review_pass_2
+    passes = state.review_passes or []
     
-    if not pass_1 and not pass_2:
+    if not passes:
         return {"status": "failed", "monologue": ["✗ No review passes available to merge."]}
     
-    # If only one pass succeeded, use it directly
-    if not pass_1:
-        return {"reviews": pass_2, "status": "arbitrate_complete", 
-                "monologue": ["🔀 Only quality pass available — using as final review."]}
-    if not pass_2:
-        return {"reviews": pass_1, "status": "arbitrate_complete", 
-                "monologue": ["🔀 Only security pass available — using as final review."]}
+    if len(passes) == 1:
+        return {"reviews": passes[0], "status": "arbitrate_complete", 
+                "monologue": ["🔀 Only one persona pass available — using directly as final review."]}
     
     # Build context for the arbitrator LLM
-    pass_1_json = pass_1.model_dump_json()
-    pass_2_json = pass_2.model_dump_json()
-    
+    pass_context = ""
+    for i, p in enumerate(passes):
+        pass_context += f"=== PASS {i+1} RESULTS ===\n{p.model_dump_json()}\n\n"
+        
     messages = [
         SystemMessage(content=ARBITRATOR_PROMPT),
         HumanMessage(content=(
-            f"=== SECURITY PASS RESULTS ===\n{pass_1_json}\n\n"
-            f"=== QUALITY PASS RESULTS ===\n{pass_2_json}\n\n"
+            f"{pass_context}"
             f"=== ORIGINAL DIFF ===\n{state.diff}\n\n"
-            f"Merge these two passes into a single unified ReviewReport. "
+            f"Merge these passes into a single unified ReviewReport. "
             f"Deduplicate overlapping findings and assign confidence scores."
         ))
     ]
@@ -324,7 +310,7 @@ async def arbitrate_node(state: AgentState):
         "reviews": response, 
         "status": "arbitrate_complete",
         "monologue": [
-            f"🔀 Arbitration complete — merged into {total} unique finding(s).",
+            f"🔀 Arbitration complete — merged {len(passes)} passes into {total} unique finding(s).",
             f"📊 Final confidence score: {response.confidence_score}%"
         ]
     }
@@ -464,17 +450,17 @@ workflow = StateGraph(AgentState)
 
 # Define the nodes in our graph (Phase 1: Dual-Pass + Arbitrator)
 workflow.add_node("input", input_parse_node)
-workflow.add_node("dual_review", dual_review_node)
+workflow.add_node("multi_review", multi_review_node)
 workflow.add_node("arbitrate", arbitrate_node)
 workflow.add_node("enhance", enhance_node)
 workflow.add_node("critique", critique_node)
 workflow.add_node("human_review", human_review_node)
 workflow.add_node("refine", refinement_node)
 
-# Connect the nodes: input → dual_review → arbitrate → enhance → critique → human_review
+# Connect the nodes: input → multi_review → arbitrate → enhance → critique → human_review
 workflow.set_entry_point("input")
-workflow.add_edge("input", "dual_review")
-workflow.add_edge("dual_review", "arbitrate")
+workflow.add_edge("input", "multi_review")
+workflow.add_edge("multi_review", "arbitrate")
 workflow.add_edge("arbitrate", "enhance")
 workflow.add_edge("enhance", "critique")
 workflow.add_edge("critique", "human_review")

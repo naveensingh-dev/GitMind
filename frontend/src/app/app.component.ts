@@ -87,6 +87,7 @@ export class App implements OnInit, AfterViewChecked {
   successMessage = signal<string | null>(null); // User-facing success messages (e.g., after completion)
   selectedFilePath = signal<string | null>(null); // Path of the file currently selected in the tree
   analysisHistory = signal<any[]>([]); // Past analysis history from SQLite
+  dashboardMetrics = signal<any>(null); // Phase 4.3: Aggregate platform metrics
   tabLoading = signal(false); // True during tab switch rendering
   
   // Human-in-the-loop signals
@@ -179,7 +180,7 @@ export class App implements OnInit, AfterViewChecked {
 
   // Pipeline Execution States (Phase 1: 7-node pipeline)
   nodeStates = signal<Record<string, string>>({
-    input: '', dual_review: '', arbitrate: '', critique: '', human_review: '', refine: '', output: ''
+    input: '', multi_review: '', arbitrate: '', critique: '', human_review: '', refine: '', output: ''
   });
 
   // Analysis Configuration
@@ -295,7 +296,39 @@ export class App implements OnInit, AfterViewChecked {
 
   loadHistory() {
     this.apiService.getHistory().subscribe({
-      next: (data) => this.analysisHistory.set(data || []),
+      next: (data) => {
+        const history = data || [];
+        this.analysisHistory.set(history);
+        
+        // Calculate Phase 4.3 Dashboard Metrics
+        if (history.length > 0) {
+          const totalReviews = history.length;
+          const sumSec = history.reduce((acc, r) => acc + (r.security_count || 0), 0);
+          const sumPerf = history.reduce((acc, r) => acc + (r.performance_count || 0), 0);
+          const sumStyle = history.reduce((acc, r) => acc + (r.style_count || 0), 0);
+          const totalThreats = sumSec + sumPerf + sumStyle;
+          const highSev = history.reduce((acc, r) => acc + (r.high_severity_count || 0), 0);
+          const avgConf = Math.round(history.reduce((acc, r) => acc + (r.confidence_score || 0), 0) / totalReviews);
+          
+          this.dashboardMetrics.set({
+            totalReviews,
+            totalThreats,
+            highSev,
+            avgConf,
+            sumSec,
+            sumPerf,
+            sumStyle,
+            secPct: totalThreats > 0 ? (sumSec / totalThreats) * 100 : 0,
+            perfPct: totalThreats > 0 ? (sumPerf / totalThreats) * 100 : 0,
+            stylePct: totalThreats > 0 ? (sumStyle / totalThreats) * 100 : 0,
+            trend: history.slice(0, 10).map(r => ({
+              date: new Date(r.created_at).toLocaleDateString(),
+              score: r.confidence_score || 0,
+              count: (r.security_count || 0) + (r.performance_count || 0) + (r.style_count || 0)
+            })).reverse()
+          });
+        }
+      },
       error: () => {} // Silently fail — history is non-critical
     });
   }
@@ -371,7 +404,7 @@ export class App implements OnInit, AfterViewChecked {
     this.threadId.set(null);
     this.startTime = Date.now();
     
-    ['input', 'dual_review', 'arbitrate', 'critique', 'human_review', 'refine', 'output'].forEach(n => this.setNode(n, ''));
+    ['input', 'multi_review', 'arbitrate', 'critique', 'human_review', 'refine', 'output'].forEach(n => this.setNode(n, ''));
     this.setNode('input', 'active');
 
     this.appendLog('info', `▶ Starting analysis using ${this.selectedModel().toUpperCase()}...`);
@@ -444,8 +477,8 @@ export class App implements OnInit, AfterViewChecked {
     }
 
     if (node === 'input') this.setNode('input', 'active');
-    else if (node === 'dual_review') { this.setNode('input', 'done'); this.setNode('dual_review', 'active'); }
-    else if (node === 'arbitrate') { this.setNode('dual_review', 'done'); this.setNode('arbitrate', 'active'); }
+    else if (node === 'multi_review') { this.setNode('input', 'done'); this.setNode('multi_review', 'active'); }
+    else if (node === 'arbitrate') { this.setNode('multi_review', 'done'); this.setNode('arbitrate', 'active'); }
     else if (node === 'critique') { 
       this.setNode('arbitrate', 'done'); 
       this.setNode('critique', 'active'); 
