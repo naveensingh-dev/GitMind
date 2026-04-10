@@ -6,101 +6,94 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
-import { ApiService, LogEntry } from './api.service';
-import { HeaderComponent } from './header.component';
-import { ActivityLogComponent } from './activity-log.component';
-import { FileTreeComponent } from './file-tree.component';
+import { ApiService, LogEntry } from './core/api.service';
+import { HeaderComponent } from './shared/components/header/header.component';
+import { ActivityLogComponent } from './shared/components/activity-log/activity-log.component';
+import { FileTreeComponent } from './shared/components/file-tree/file-tree.component';
+import { AnalyticsDashboardComponent } from './features/analytics/analytics.component';
+import { ReviewPanelComponent } from './shared/components/review-panel/review-panel.component';
+import { DiffViewerComponent } from './features/diff-viewer/diff-viewer.component';
+import { SummaryTabComponent } from './features/summary-tab/summary-tab.component';
+import { PipelineVisualizerComponent } from './features/pipeline-visualizer/pipeline-visualizer.component';
+import { ThinkingLogsComponent } from './features/thinking-logs/thinking-logs.component';
+import { AutofixPanelComponent } from './features/autofix-panel/autofix-panel.component';
+import { TestsPanelComponent } from './features/tests-panel/tests-panel.component';
+import { AgentControlsComponent } from './features/agent-controls/agent-controls.component';
+import { OverlaysComponent } from './features/overlays/overlays.component';
+import { AnalysisHistoryComponent } from './features/analysis-history/analysis-history.component';
+import { HumanFeedbackComponent } from './features/human-feedback/human-feedback.component';
+import { ArchTabComponent } from './features/arch-tab/arch-tab.component';
+import { RawReportTabComponent } from './features/raw-report-tab/raw-report-tab.component';
 
-// --- DATA MODELS ---
+import { SidebarLayoutComponent } from './features/sidebar-layout/sidebar-layout.component';
+import { ReportHeaderComponent } from './features/report-header/report-header.component';
+import { TabsBarComponent } from './features/tabs-bar/tabs-bar.component';
 
-interface ReviewItem {
-  issue: string;
-  severity: 'high' | 'medium' | 'low';
-  file_path?: string;
-  line_number?: number;
-  line?: string;
-  fix: string;
-  confidence?: number;
-  found_by?: string[];
-}
+import { GitMindStateService } from './core/state.service';
 
-interface ReviewReport {
-  security: ReviewItem[];
-  performance: ReviewItem[];
-  style: ReviewItem[];
-  summary: string;
-  approval_status: 'approved' | 'needs_changes' | 'rejected';
-  confidence_score: number;
-}
-
-interface DiffLine {
-  content: string;
-  type: 'added' | 'removed' | 'neutral';
-  leftLine?: number;
-  rightLine?: number;
-}
-
-interface DiffHunk {
-  header: string;
-  lines: DiffLine[];
-}
-
-interface DiffFile {
-  path: string;
-  additions: number;
-  deletions: number;
-  hunks: DiffHunk[];
-  isOpen: boolean;
-}
-
+import {
+  ReviewItem,
+  ReviewReport,
+  DiffLine,
+  DiffHunk,
+  DiffFile,
+  DashboardMetrics
+} from './core/models';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, HeaderComponent, ActivityLogComponent, FileTreeComponent],
+  imports: [CommonModule, FormsModule, HeaderComponent, ActivityLogComponent, AnalyticsDashboardComponent, ReviewPanelComponent, DiffViewerComponent, SummaryTabComponent, PipelineVisualizerComponent, ThinkingLogsComponent, AutofixPanelComponent, TestsPanelComponent, AgentControlsComponent, OverlaysComponent, AnalysisHistoryComponent, HumanFeedbackComponent, ArchTabComponent, RawReportTabComponent, SidebarLayoutComponent, ReportHeaderComponent, TabsBarComponent],
   templateUrl: './app.component.html',
 })
-export class App implements OnInit, AfterViewChecked {
-  ngAfterViewChecked() {
-    if (this.currentTab() === 'arch') {
-      try {
-        mermaid.init(undefined, document.querySelectorAll('.mermaid'));
-      } catch (e) {}
-    }
-  }
+export class App implements OnInit {
 
   private sanitizer = inject(DomSanitizer);
   private apiService = inject(ApiService);
 
-  // --- UI & STATE SIGNALS ---
-  
-  prUrl = signal(''); // Holds the current GitHub PR or Commit URL
-  diffInput = signal(''); // Raw diff text (either fetched or pasted)
-  isAnalyzing = signal(false); // Indicates if an analysis is currently in progress
-  currentTab = signal('diff'); // Currently active tab in the main view
-  logs = signal<LogEntry[]>([]); // Array of logs for the activity sidebar
-  analysisData = signal<ReviewReport | null>(null); // Final structured review report from the agent
-  critiqueData = signal<{ score: number, feedback?: string, accurate?: boolean } | null>(null); // AI self-critique results
-  autoFixes = signal<any | null>(null); // Phase 3: Auto-fix patches
-  generatedTests = signal<any | null>(null); // Phase 3: Unit tests
-  archReview = signal<any | null>(null); // Phase 3: Architecture Mermaid diagram
-  errorMessage = signal<string | null>(null); // User-facing error messages
-  successMessage = signal<string | null>(null); // User-facing success messages (e.g., after completion)
-  selectedFilePath = signal<string | null>(null); // Path of the file currently selected in the tree
-  analysisHistory = signal<any[]>([]); // Past analysis history from SQLite
-  dashboardMetrics = signal<any>(null); // Phase 4.3: Aggregate platform metrics
-  tabLoading = signal(false); // True during tab switch rendering
-  
+  public state = inject(GitMindStateService);
+
+  // --- UI & STATE SIGNALS (Facade to State Service) ---
+
+  prUrl = this.state.prUrl;
+  diffInput = this.state.diffInput;
+  isAnalyzing = this.state.isAnalyzing;
+  currentTab = this.state.currentTab;
+  logs = this.state.logs;
+  analysisData = this.state.analysisData;
+  critiqueData = this.state.critiqueData;
+  autoFixes = this.state.autoFixes;
+  generatedTests = this.state.generatedTests;
+  archReview = this.state.archReview;
+  errorMessage = this.state.errorMessage;
+  successMessage = this.state.successMessage;
+  selectedFilePath = this.state.selectedFilePath;
+  analysisHistory = this.state.analysisHistory;
+  dashboardMetrics = this.state.dashboardMetrics;
+  tabLoading = this.state.tabLoading;
+
   // Human-in-the-loop signals
-  threadId = signal<string | null>(null); // LangGraph thread ID for session persistence
-  isAwaitingFeedback = signal(false); // True if the agent is paused waiting for user input
-  userFeedback = signal(''); // Current text in the feedback textarea
+  threadId = this.state.threadId;
+  isAwaitingFeedback = this.state.isAwaitingFeedback;
+  userFeedback = this.state.userFeedback;
 
   // Model Selection & Credentials
-  selectedProvider = signal('gemini');
-  selectedModel = signal('gemini-1.5-flash');
-  userApiKey = signal(''); // Locally provided API key (overrides server-side env vars)
+  selectedProvider = this.state.selectedProvider;
+  selectedModel = this.state.selectedModel;
+  userApiKey = this.state.userApiKey;
   githubTokenInput = '';
-  githubToken = signal(''); // GitHub Personal Access Token for PR comments
+  githubToken = this.state.githubToken;
+
+  appendLog(type: LogEntry['type'], msg: string) {
+    this.state.appendLog(type, msg);
+  }
+
+  clearError() {
+    this.state.clearError();
+  }
+
+  clearSuccess() {
+    this.state.clearSuccess();
+  }
 
   /**
    * Updates the GitHub token and persists it to local storage.
@@ -117,28 +110,28 @@ export class App implements OnInit, AfterViewChecked {
   /**
    * Model Configuration Map
    */
-  modelOptions: Record<string, {label: string, value: string}[]> = {
+  modelOptions: Record<string, { label: string, value: string }[]> = {
     gemini: [
       // Gemini 3 Series
       { label: 'Gemini 3.1 Pro (Preview)', value: 'gemini-3.1-pro-preview' },
       { label: 'Gemini 3.1 Flash-Lite (Preview)', value: 'gemini-3.1-flash-lite-preview' },
       { label: 'Gemini 3 Flash (Preview)', value: 'gemini-3-flash-preview' },
-      
+
       // Gemini 2.5 Series
       { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
       { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
       { label: 'Gemini 2.5 Flash-Lite', value: 'gemini-2.5-flash-lite' },
-      
+
       // Gemini 2.0 Series
       { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
       { label: 'Gemini 2.0 Flash-Lite', value: 'gemini-2.0-flash-lite' },
       { label: 'Gemini 2.0 Flash (Latest)', value: 'gemini-2.0-flash-001' },
-      
+
       // Gemini 1.5 Series
       { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
       { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
       { label: 'Gemini 1.5 Flash (Latest)', value: 'gemini-flash-latest' },
-      
+
       // Legacy / Stable
       { label: 'Gemini 1.0 Pro', value: 'gemini-pro-latest' }
     ],
@@ -206,11 +199,11 @@ export class App implements OnInit, AfterViewChecked {
   parsedFiles = computed<DiffFile[]>(() => {
     const raw = this.diffInput();
     if (!raw) return [];
-    
+
     const files: DiffFile[] = [];
     let currentFile: DiffFile | null = null;
     let currentHunk: DiffHunk | null = null;
-    
+
     const lines = raw.split('\n');
     let leftLine = 0;
     let rightLine = 0;
@@ -244,8 +237,8 @@ export class App implements OnInit, AfterViewChecked {
         }
       }
     }
-    // Auto-expand the first 3 files for quick visibility
-    for (let i = 0; i < Math.min(3, files.length); i++) {
+    // Auto-expand all files by default as requested
+    for (let i = 0; i < files.length; i++) {
       files[i].isOpen = true;
     }
     return files;
@@ -299,7 +292,11 @@ export class App implements OnInit, AfterViewChecked {
       next: (data) => {
         const history = data || [];
         this.analysisHistory.set(history);
-        
+
+        if (history.length > 0 && !this.diffInput()) {
+          this.currentTab.set('history');
+        }
+
         // Calculate Phase 4.3 Dashboard Metrics
         if (history.length > 0) {
           const totalReviews = history.length;
@@ -309,7 +306,7 @@ export class App implements OnInit, AfterViewChecked {
           const totalThreats = sumSec + sumPerf + sumStyle;
           const highSev = history.reduce((acc, r) => acc + (r.high_severity_count || 0), 0);
           const avgConf = Math.round(history.reduce((acc, r) => acc + (r.confidence_score || 0), 0) / totalReviews);
-          
+
           this.dashboardMetrics.set({
             totalReviews,
             totalThreats,
@@ -329,7 +326,7 @@ export class App implements OnInit, AfterViewChecked {
           });
         }
       },
-      error: () => {} // Silently fail — history is non-critical
+      error: () => { } // Silently fail — history is non-critical
     });
   }
 
@@ -372,13 +369,7 @@ export class App implements OnInit, AfterViewChecked {
     this.appendLog('info', 'Example PR diff loaded: webapp/pull/142');
   }
 
-  appendLog(type: LogEntry['type'], msg: string) {
-    const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
-    const s = elapsed % 60;
-    const m = Math.floor(elapsed / 60);
-    const time = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    this.logs.update(prev => [...prev, { time, type, msg }]);
-  }
+
 
   setNode(id: string, state: string) {
     this.nodeStates.update(prev => ({ ...prev, [id]: state }));
@@ -387,7 +378,7 @@ export class App implements OnInit, AfterViewChecked {
   async startAnalysis() {
     const diff = this.diffInput().trim();
     const url = this.prUrl().trim();
-    
+
     if (!diff && !url) {
       this.appendLog('error', 'Please provide a PR URL or paste a diff first.');
       return;
@@ -403,7 +394,7 @@ export class App implements OnInit, AfterViewChecked {
     this.refinementCount.set(0);
     this.threadId.set(null);
     this.startTime = Date.now();
-    
+
     ['input', 'multi_review', 'arbitrate', 'critique', 'human_review', 'refine', 'output'].forEach(n => this.setNode(n, ''));
     this.setNode('input', 'active');
 
@@ -479,9 +470,9 @@ export class App implements OnInit, AfterViewChecked {
     if (node === 'input') this.setNode('input', 'active');
     else if (node === 'multi_review') { this.setNode('input', 'done'); this.setNode('multi_review', 'active'); }
     else if (node === 'arbitrate') { this.setNode('multi_review', 'done'); this.setNode('arbitrate', 'active'); }
-    else if (node === 'critique') { 
-      this.setNode('arbitrate', 'done'); 
-      this.setNode('critique', 'active'); 
+    else if (node === 'critique') {
+      this.setNode('arbitrate', 'done');
+      this.setNode('critique', 'active');
       if (critique) this.critiqueData.set(critique);
     }
     else if (node === 'enhance') {
@@ -490,10 +481,10 @@ export class App implements OnInit, AfterViewChecked {
       if (generated_tests) this.generatedTests.set(generated_tests);
       if (arch_review) this.archReview.set(arch_review);
     }
-    else if (node === 'refine') { 
-      this.setNode('human_review', 'done'); 
-      this.setNode('refine', 'loop'); 
-      this.refinementCount.set(refinement_count); 
+    else if (node === 'refine') {
+      this.setNode('human_review', 'done');
+      this.setNode('refine', 'loop');
+      this.refinementCount.set(refinement_count);
     }
 
     if (reviews) {
@@ -512,17 +503,17 @@ export class App implements OnInit, AfterViewChecked {
 
   getUserFriendlyErrorMessage(rawMessage: string): string {
     const msg = rawMessage.toLowerCase();
-    
+
     // Check for exhaustive limits / rate limits
     if (msg.includes('429') || msg.includes('quota') || msg.includes('exhausted') || msg.includes('rate_limit')) {
       return "Quota Exhausted: Your API provider's resource limits or billing constraints have been hit. Please check your account dashboard or try switching to a different LLM model.";
     }
-    
+
     // Check for auth / invalid key
     if (msg.includes('401') || msg.includes('400') && msg.includes('api key') || msg.includes('unauthorized') || msg.includes('invalid api key') || msg.includes('incorrect api key') || msg.includes('api_key_invalid')) {
       return "Invalid API Key: The LLM API key provided is missing, invalid, or incorrect. Please check the Agent Controls panel and ensure you have entered a valid key for the selected model.";
     }
-    
+
     // Check for permissions
     if (msg.includes('403') || msg.includes('forbidden') || msg.includes('permission denied')) {
       return "Permission Denied: Ensure you have the required access rights for this model, and your GitHub PAT has the correct read scopes for the linked repository.";
@@ -544,7 +535,7 @@ export class App implements OnInit, AfterViewChecked {
   submitFeedback() {
     const feedback = this.userFeedback().trim();
     const threadId = this.threadId();
-    
+
     if (!threadId) return;
 
     this.isAnalyzing.set(true);
@@ -563,24 +554,18 @@ export class App implements OnInit, AfterViewChecked {
         }
       }
     });
-    
+
     this.userFeedback.set(''); // Clear input
   }
 
-  clearError() {
-    this.errorMessage.set(null);
-  }
 
-  clearSuccess() {
-    this.successMessage.set(null);
-  }
 
   switchTab(name: string) {
     // Phase: Deferred tab switching — show loader, yield to browser, then update
     if (this.currentTab() === name) return;
     this.tabLoading.set(true);
     this.currentTab.set('__loading__'); // Clear current tab to unmount heavy DOM
-    
+
     // Use requestAnimationFrame to let the browser paint the skeleton first
     requestAnimationFrame(() => {
       setTimeout(() => {
@@ -601,17 +586,6 @@ export class App implements OnInit, AfterViewChecked {
     return (item.file_path || '') + ':' + (item.line_number || index) + ':' + item.issue.slice(0, 30);
   }
 
-  getApprovalInfo() {
-    const data = this.analysisData();
-    if (!data) return null;
-    
-    const statusMap = {
-      approved: { icon: '✅', label: 'Approved', sub: 'Ready to merge', cls: 'approved' },
-      needs_changes: { icon: '⚠️', label: 'Needs Changes', sub: 'Address issues before merging', cls: 'needs_changes' },
-      rejected: { icon: '❌', label: 'Rejected', sub: 'Significant issues require attention', cls: 'rejected' }
-    };
-    return (statusMap as any)[data.approval_status] || statusMap['needs_changes'];
-  }
 
   fetchPrDiff() {
     const url = this.prUrl().trim();
@@ -621,7 +595,7 @@ export class App implements OnInit, AfterViewChecked {
     }
 
     this.appendLog('info', `▶ Fetching diff from GitHub...`);
-    
+
     this.apiService.fetchDiff(url).subscribe({
       next: (res) => {
         this.diffInput.set(res.diff);
@@ -637,15 +611,15 @@ export class App implements OnInit, AfterViewChecked {
   buildMarkdownReport() {
     const data = this.analysisData();
     if (!data) return '';
-    
+
     const ts = new Date().toISOString().split('T')[0];
     let md = `# GitMind Code Review Report\n\n`;
     md += `**Generated:** ${ts}  \n`;
     md += `**Status:** ${data.approval_status?.toUpperCase() || 'UNKNOWN'}  \n`;
     md += `**Confidence:** ${data.confidence_score || 0}%\n\n`;
-    
+
     md += `## Executive Summary\n\n${data.summary || 'No summary provided.'}\n\n`;
-    
+
     ['security', 'performance', 'style'].forEach(cat => {
       const items = (data as any)[cat];
       if (items && items.length > 0) {
@@ -657,7 +631,7 @@ export class App implements OnInit, AfterViewChecked {
         });
       }
     });
-    
+
     md += `---\n*Report generated by GitMind — LangGraph Self-Correcting Code Review Agent*`;
     return md;
   }
@@ -682,7 +656,7 @@ export class App implements OnInit, AfterViewChecked {
     }
 
     this.appendLog('info', `▶ Pushing suggestion to GitHub for: ${item.issue}...`);
-    
+
     this.apiService.pushComment(url, item, token).subscribe({
       next: (res) => {
         this.appendLog('success', `✓ Suggestion posted successfully! View here: ${res.comment_url}`);
@@ -693,52 +667,25 @@ export class App implements OnInit, AfterViewChecked {
     });
   }
 
-  toggleFile(file: DiffFile) {
-    file.isOpen = !file.isOpen;
-  }
+
 
   scrollToFile(path: string) {
     this.selectedFilePath.set(path);
-    this.currentTab.set('diff');
-    
-    // Give Angular time to switch tab if needed
+    if (this.currentTab() !== 'diff') {
+        this.switchTab('diff');
+    }
+
+    // Give Angular time to render if tab was switched
     setTimeout(() => {
       const element = document.getElementById(`file-${path}`);
       if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+         // Changed behavior from 'smooth' to 'auto' or 'instant' to fix 'longer time to navigate'
+        element.scrollIntoView({ behavior: 'auto', block: 'start' });
       }
     }, 100);
   }
 
-  // Highlight cache to prevent re-running hljs.highlightAuto on every render
-  private _highlightCache = new Map<string, SafeHtml>();
-  private _highlightCacheMax = 3000; // Evict cache after this many entries
 
-  highlightCode(code: string): SafeHtml {
-    if (!code) return '';
-    
-    // Check cache first
-    const cached = this._highlightCache.get(code);
-    if (cached) return cached;
-    
-    let result: SafeHtml;
-    try {
-      const highlighted = hljs.highlightAuto(code).value;
-      const cleanHtml = DOMPurify.sanitize(highlighted);
-      result = this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
-    } catch (e) {
-      // Fallback if highlight fails
-      const cleanHtml = DOMPurify.sanitize(code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-      result = this.sanitizer.bypassSecurityTrustHtml(cleanHtml);
-    }
-    
-    // Evict cache if too large
-    if (this._highlightCache.size >= this._highlightCacheMax) {
-      this._highlightCache.clear();
-    }
-    this._highlightCache.set(code, result);
-    return result;
-  }
 
   // --- PHASE 3: APPLY FIX ---
   applyingFixFor = signal<string | null>(null);

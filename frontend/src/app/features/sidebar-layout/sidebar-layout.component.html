@@ -1,0 +1,20 @@
+<!-- SIDEBAR (File Tree) -->
+<div class="sidebar" *ngIf="diffInput">
+  <div class="sidebar-header">
+    <div class="panel-title">
+      <svg class="panel-title-icon" viewBox="0 0 18 18" fill="none">
+        <path d="M3 3h12v12H3V3z" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M7 3v12" stroke="currentColor" stroke-width="1.2"/>
+      </svg>
+      Files
+    </div>
+  </div>
+  <div class="sidebar-content">
+    <app-file-tree 
+      [files]="filePaths" 
+      [selectedPath]="selectedFilePath" 
+      (fileSelect)="scrollToFileAction.emit($event)">
+    </app-file-tree>
+  </div>
+
+</div>

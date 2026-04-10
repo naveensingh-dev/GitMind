@@ -4,6 +4,8 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
+    "start:backend": "cd ../backend && source venv/bin/activate && python main.py",
+    "setup:backend": "cd ../backend && source venv/bin/activate && pip install -r requirements.txt",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "serve:ssr:gitmind-frontend": "node dist/gitmind-frontend/server/server.mjs"

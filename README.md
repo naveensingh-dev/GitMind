@@ -1,48 +1,47 @@
-# 🤖 GitMind: The Self-Correcting AI Code Reviewer
+# 🤖 GitMind: The Autonomous Cognitive Code Reviewer
 
 <p align="center">
-  <img src="./image1.png" width="90%" alt="GitMind Dashboard" style="border-radius: 12px; box-shadow: 0 12px 48px rgba(0,12,48,0.4);">
+  <img src="./image1.png" width="90%" alt="GitMind Dashboard" style="border-radius: 24px; box-shadow: 0 20px 80px rgba(139, 92, 246, 0.4);">
 </p>
 
-[![LangGraph](https://img.shields.io/badge/LangGraph-v0.2-blue.svg)](https://github.com/langchain-ai/langgraph)
-[![Angular 20](https://img.shields.io/badge/Angular-20.1-dd0031.svg)](https://angular.dev/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-Latest-009688.svg)](https://fastapi.tiangolo.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![LangGraph](https://img.shields.io/badge/LangGraph-v0.2-blue.svg?style=for-the-badge&logo=langchain)](https://github.com/langchain-ai/langgraph)
+[![Angular 20](https://img.shields.io/badge/Angular-20.1-dd0031.svg?style=for-the-badge&logo=angular)](https://angular.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Latest-009688.svg?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-**GitMind** is a next-generation, autonomous code review platform powered by **LangGraph** and a cyclic **Agentic Reasoning Engine**. It transcends traditional static analysis by employing a multi-agent reasoning loop that mimics a senior engineer's review process—detecting vulnerabilities, generating auto-fix patches, and visualizing architecture through a self-correcting cognitive pipeline.
-
----
-
-## ⚡ Why GitMind?
-
-GitMind solves the "one-shot" AI hallucination problem through a multi-perspective, stateful reasoning process:
-
-- **🧠 Triple-Agent Pipeline:** Simultaneously runs independent **Security Auditor** and **Quality Engineer** passes, arbitrated by a senior **Logic Controller**.
-- **🛠️ Agentic Capabilities:** Beyond just "comments," GitMind generates **concrete code patches**, **unit tests**, and **architectural diagrams** (Mermaid) for every PR.
-- **✋ Human-in-the-Loop (HITL):** Built-in interruption points allow developers to steer the agent mid-process or refine suggestions via natural language.
-- **💬 Discussion-Aware:** Fetches existing human discussion from GitHub PRs to ensure the agent doesn't repeat or contradict what has already been discussed.
-- **💾 Stateful Persistence:** SQLite-backed persistence for both execution threads and analysis history, allowing you to browse past reviews.
-- **🚀 Live "Thinking" Block:** A real-time, animated UI component that streams the agent's internal monologue and decision-making process.
+**GitMind** is a state-of-the-art **Autonomous Reasoning Platform** designed to revolutionize the software development lifecycle. Beyond simple static analysis, GitMind employs a **Multi-Agent Cognitive Architecture** orchestrated by **LangGraph**, simulating a rigorous, peer-reviewed engineering process. It doesn't just scan code—it understands it, critiques itself, generates fixes, and visualizes architecture in real-time.
 
 ---
 
-## 🧠 Core Intelligence: The Reasoning Loop
+## ⚡ Cognitive Superiority: Why GitMind?
 
-GitMind's orchestration is managed by **LangGraph**, providing a robust framework for complex, cyclic reasoning paths.
+GitMind eliminates the volatility of "one-shot" AI responses by leveraging a **Self-Correcting Distributed System**:
+
+- **🧠 Multi-Agent Arbitration:** A three-tier hierarchy featuring independent **Security Auditors** and **Quality Engineers**, synthesized by a senior **Arbitrator** to eliminate hallucinations.
+- **🛠️ Agentic Synthesis:** Goes beyond comments by generating **production-ready code patches**, **exhaustive unit test suites**, and **dynamic Mermaid architecture diagrams**.
+- **✋ Deep Human-in-the-Loop:** State-persistence via **SQLite Checkpointing** allows the agent to pause execution, wait for developer intent, and resume with updated context.
+- **💬 Contextual Intelligence:** Discussion-aware engine that fetches and reconciles existing PR comments, ensuring the AI aligns with established human consensus.
+- **🚀 Zero-Latency UX:** A zoneless **Angular 20 Signals** architecture provides a real-time, high-fidelity experience with zero DOM overhead.
+
+---
+
+## 🧠 The Orchestration Engine: 8-Stage Pipeline
+
+The GitMind brain is a **Cyclic Directed Acyclic Graph (DAG)** that facilitates non-linear reasoning and iterative refinement.
 
 ```mermaid
 graph TD
-    Start((Start)) --> Input[📥 Input Parse]
+    Start((●)) --> Input[📥 Input Parse]
     Input --> DP[🔍 Dual-Pass Review]
     DP --> Arb[🔀 Arbitrator Node]
     Arb --> Enh[🚀 Agentic Enhance]
     Enh --> Critique[🧠 AI Critique]
-    Critique --> HITL[✋ Human Review Node]
+    Critique --> HITL[✋ Human Feedback]
     
-    HITL -- "Refine Feedback" --> Refine[🔄 Refinement Loop]
+    HITL -- "Iterative Refinement" --> Refine[🔄 Refiner]
     Refine --> Critique
     
-    HITL -- "Approve" --> End((🏁 Final Report))
+    HITL -- "Consensus Reached" --> End((🏁 Final Report))
     
     style HITL fill:#f96,stroke:#333,stroke-width:2px,color:#000
     style End fill:#00ffa3,stroke:#333,stroke-width:2px,color:#000
@@ -50,92 +49,72 @@ graph TD
     style Enh fill:#d946ef,stroke:#333,stroke-width:2px,color:#000
 ```
 
-### The 8-Stage Pipeline:
-1.  **Input Parse:** Fetches diffs, loads `.gitmind.yaml`, and builds a prioritized, structured context.
-2.  **Dual-Pass Review:** Concurrent execution of **Security Auditor** and **Quality Engineer** passes.
-3.  **Arbitrator:** Merges both passes, deduplicates findings, and assigns cross-perspective confidence scores.
-4.  **Agentic Enhance:** Generates **Auto-Fix patches**, **Unit Tests**, and **Mermaid Architecture Diagrams**.
-5.  **AI Critique:** A dedicated "Critic" agent checks the report for hallucinations and tone accuracy.
-6.  **Human Interruption:** The graph pauses, allowing developers to steer the analysis.
-7.  **Refinement:** The "Refiner" agent reconciles all findings with AI critique and human input.
-8.  **Auto-Save:** Reviews are automatically persisted to the SQLite history database.
+### Cognitive Phases:
+1.  **Ingestion & Prioritization:** Structures diffs and prioritizes critical source logic over boilerplate and lock files.
+2.  **Concurrent Analysis:** Parallel execution of security-focused and performance-focused review passes.
+3.  **Synthesis & Arbitration:** Deduplicates cross-perspective findings and assigns empirical confidence scores.
+4.  **Agentic Enhancement:** Synthesizes **Auto-Fixes**, **Unit Tests**, and **Dependency Visualizations**.
+5.  **Autonomous Critique:** A "Critic" node validates the report for accuracy, tone, and actionability.
+6.  **Persistence & Resumption:** The graph state is snapshotted to SQLite, enabling long-running human-in-the-loop interactions.
 
 ---
 
-## 🚀 Key Features & Capabilities
+## 🚀 Advanced Capabilities
 
-| Feature | Technical Implementation |
+| Pillar | Technical Implementation |
 | :--- | :--- |
-| **Agentic Auto-Fix** | Generates minimal, safe patches for findings with a **One-Click Apply** button to GitHub. |
-| **Test Generation** | Analyzes changed functions and generates **Jest/Pytest/JUnit** tests automatically. |
-| **Architecture Visualization**| Produces **Mermaid.js** diagrams showing dependency changes and module relationships. |
-| **Thinking Visualization**| Real-time streaming UI using **Angular 20 Signals** and **FastAPI SSE**. |
-| **Stateful Memory** | `SqliteSaver` checkpointer ensures session persistence across restarts. |
-| **Discussion-Aware** | Integrated PR comment fetching via GitHub REST API to avoid redundant feedback. |
+| **Agentic Auto-Fix** | Minimal-diff patch generation with **One-Click GitHub Application**. |
+| **Architecture RAG** | Dynamic generation of **Mermaid.js** diagrams to visualize module coupling changes. |
+| **Cognitive Monologue**| Real-time SSE streaming of the agent's internal reasoning directly to the UI. |
+| **Repo-Level Config** | `.gitmind.yaml` support for path-specific rules and severity thresholds. |
+| **Stateful Persistence**| Thread-safe history browsing via **langgraph-checkpoint-sqlite**. |
 
 ---
 
-## 🛠 Configuration (.gitmind.yaml)
-
-Customize the review experience by placing a `.gitmind.yaml` in your repository root:
-
-```yaml
-# GitMind Project Configuration
-model: "gemini-2.0-flash-pro"
-provider: "gemini"
-severity_threshold: "medium" 
-ignore_paths:
-  - "dist/**"
-  - "node_modules/**"
-custom_instructions: |
-  We follow strict Functional Programming principles. 
-  Flag any use of mutable state or 'let' keywords.
-```
-
----
-
-## 📂 Project Architecture
+## 🛠 Project Architecture
 
 ```text
 GitMind/
-├── backend/                # FastAPI Application
-│   ├── agent.py            # LangGraph Core (8-node pipeline)
-│   ├── auto_fix.py         # Patch Generation Logic
-│   ├── test_gen.py         # Unit Test Synthesis
-│   ├── arch_review.py      # Mermaid Diagram Orchestration
-│   ├── history.py          # SQLite Persistence Layer
-│   ├── schemas.py          # Pydantic State & Report Definitions
-│   └── requirements.txt    # Async-optimized deps
-├── frontend/               # Angular 20 Application
-│   ├── src/app/            # Reactive Signal Components
+├── backend/                # Cognitive Backend (Python 3.10+)
+│   ├── agent.py            # LangGraph Orchestration & 8-node logic
+│   ├── auto_fix.py         # Patch Synthesis Engine
+│   ├── test_gen.py         # Unit Test Generation Logic
+│   ├── arch_review.py      # Mermaid Diagram Synthesis
+│   ├── history.py          # SQLite persistence & Session Management
+│   └── diff_parser.py      # Prioritized Context Building
+├── frontend/               # Reactive Frontend (Angular 20)
+│   ├── src/app/            # Signals-based Component Architecture
 │   ├── src/styles.css      # Cyberpunk UI & Thinking Block Animations
-│   └── package.json        # Frontend Toolchain
-└── README.md               # Documentation
+│   └── package.json        # High-performance toolchain
+└── README.md               # You are here
 ```
 
 ---
 
-## ⚙️ Installation & Setup
+## ⚙️ Execution & Setup
 
 ### 1. Prerequisites
 - **Python:** 3.10+ | **Node.js:** 20+ | **NPM:** 10+
 
-### 2. Quick Start
+### 2. Deployment
 ```bash
-# Terminal 1: Backend
+# Terminal 1: Backend Cognitive Layer
 cd backend && pip install -r requirements.txt && python main.py
 
-# Terminal 2: Frontend
+# Terminal 2: Frontend Reactive Layer
 cd frontend && npm install && npm start
 ```
-Navigate to `http://localhost:4200` to start your first review.
+Access the neural interface at `http://localhost:4200`.
 
 ---
 
-## 🤝 Contributing
+## 🗺 Roadmap
 
-We are building the future of autonomous software engineering. Join us!
-1. Fork the repository | 2. Create feature branch | 3. Push changes | 4. Open PR.
+- [x] **v1.0:** LangGraph Core & Basic Review.
+- [x] **v1.5:** Dual-Pass Arbitration & SQLite Persistence.
+- [x] **v2.0:** Agentic Enhancements (Auto-fix, Tests, Diagrams).
+- [ ] **v2.5:** OAuth2 GitHub Integration & Multi-Repo Context.
+- [ ] **v3.0:** Local RAG indexing for full-codebase architectural awareness.
 
 ---
-*Developed with 🚀 by the GitMind Team. Empowering developers through intelligent automation.*
+*Built for the engineers of tomorrow. Empowering high-velocity development through cognitive automation.*

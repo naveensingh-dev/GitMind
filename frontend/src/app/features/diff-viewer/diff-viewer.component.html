@@ -1,0 +1,25 @@
+<div class="diff-container">
+  <div *ngFor="let file of processedFiles; trackBy: trackByPath" class="file-block" [id]="'file-' + file.path">
+    <div class="file-header" (click)="toggleFile(file)">
+      <span class="chevron" [class.open]="file.isOpen">▼</span>
+      <span class="file-path">{{ file.path }}</span>
+      <div class="file-stats">
+        <span class="add">+{{ file.additions }}</span>
+        <span class="del">-{{ file.deletions }}</span>
+      </div>
+    </div>
+    
+    <div *ngIf="file.isOpen" class="file-content">
+      <div *ngFor="let hunk of file.processedHunks; trackBy: trackByIndex" class="hunk">
+        <div class="hunk-header">{{ hunk.header }}</div>
+        <div *ngFor="let line of hunk.processedLines; trackBy: trackByIndex" [class]="'diff-line ' + line.type">
+          <div class="line-numbers">
+            <span class="num">{{ line.leftLine || '' }}</span>
+            <span class="num">{{ line.rightLine || '' }}</span>
+          </div>
+          <div class="line-content" [innerHTML]="line.safeHtml"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

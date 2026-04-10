@@ -1,0 +1,45 @@
+<div class="approval-strip" *ngIf="getApprovalInfo()">
+  <div class="approval-main">
+    <span class="approval-icon">{{ getApprovalInfo()?.icon }}</span>
+    <div>
+      <div class="approval-title" [ngClass]="getApprovalInfo()?.cls">{{ getApprovalInfo()?.label }}</div>
+      <div class="approval-sub">{{ getApprovalInfo()?.sub }}</div>
+    </div>
+  </div>
+  <div class="approval-score" *ngIf="analysisData?.confidence_score">
+    <div class="score-num">{{ analysisData?.confidence_score }}%</div>
+    <div class="score-label">Confidence</div>
+  </div>
+</div>
+
+<div class="summary-box">
+  <div class="group-title" style="margin-bottom: 16px;">Executive Summary</div>
+  <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ analysisData?.summary }}</p>
+  
+  <div class="conf-bar-wrap" *ngIf="analysisData?.confidence_score">
+    <div class="conf-bar-label">
+      <span>AI Confidence Level</span>
+      <span>{{ analysisData?.confidence_score }}%</span>
+    </div>
+    <div class="conf-bar-track">
+      <div class="conf-bar-fill" [style.width.%]="analysisData?.confidence_score"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Critic Corner -->
+<div class="summary-box critique-box" *ngIf="critiqueData" style="margin-top: 20px; border-color: rgba(167, 139, 250, 0.2);">
+  <div class="group-title" style="margin-bottom: 16px; color: var(--purple);">🧠 Critic's Corner</div>
+  <div style="display: flex; align-items: flex-start; gap: 20px;">
+    <div class="critique-score-circle">
+      <span class="score-val">{{ critiqueData?.score }}</span>
+      <span class="score-lbl">Quality</span>
+    </div>
+    <div style="flex: 1;">
+      <div style="font-size: 12px; color: var(--text3); font-family: var(--mono); margin-bottom: 8px;">SELF-CORRECTION FEEDBACK:</div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: var(--text2); font-style: italic;">
+        "{{ critiqueData?.feedback || 'The review was deemed accurate and requires no further refinement.' }}"
+      </p>
+    </div>
+  </div>
+</div>

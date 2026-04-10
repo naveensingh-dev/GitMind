@@ -1,0 +1,32 @@
+<div class="summary-box" style="margin-bottom: 20px;">
+  <div class="group-title">Agent Generated Patches</div>
+  <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ autoFixes?.summary }}</p>
+</div>
+<div *ngIf="autoFixes?.fixes?.length === 0" class="placeholder-text" style="padding: 40px;">No auto-fixes generated.</div>
+<div *ngFor="let fix of autoFixes?.fixes" class="review-card open autofix-card">
+  <div class="review-card-header" style="justify-content: space-between; align-items: center;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="severity-pill" [ngClass]="'sev-' + fix.severity">{{ fix.severity }}</span>
+      <span class="card-issue" style="font-family: var(--mono); color: var(--g);">{{ fix.file_path }}</span>
+    </div>
+    <button class="push-github-btn" 
+            [class.danger-btn]="!fix.is_safe" 
+            [disabled]="applyingFixFor === fix.file_path"
+            (click)="onApplyFix(fix)">
+      {{ applyingFixFor === fix.file_path ? 'Applying...' : (fix.is_safe ? 'One-Click Apply ↗' : 'Apply (Unsafe) ↗') }}
+    </button>
+  </div>
+  <div class="review-card-body" style="padding: 16px;">
+    <p style="margin-top: 0; color: var(--text2); font-size: 13px;">{{ fix.description }}</p>
+    <div class="diff-split-view">
+      <div class="diff-half diff-original">
+         <div class="diff-header">Original</div>
+         <pre><code [innerHTML]="highlightCode(fix.original_code)"></code></pre>
+      </div>
+      <div class="diff-half diff-fixed">
+         <div class="diff-header">Fixed</div>
+         <pre><code [innerHTML]="highlightCode(fix.fixed_code)"></code></pre>
+      </div>
+    </div>
+  </div>
+</div>

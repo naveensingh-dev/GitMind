@@ -1,0 +1,13 @@
+<div class="summary-box" style="margin-bottom: 20px; border-color: rgba(0, 191, 255, 0.2);">
+  <div class="group-title" style="color: #00bfff;">Generated Unit Tests</div>
+  <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ generatedTests?.summary }}</p>
+</div>
+<div *ngFor="let test of generatedTests?.tests" class="review-card open">
+  <div class="review-card-header">
+    <span class="card-issue" style="color: #00bfff;">{{ test.test_file_path }}</span>
+    <span class="severity-pill" style="background: rgba(0, 191, 255, 0.15); color: #00bfff;">{{ test.test_framework }}</span>
+  </div>
+  <div class="review-card-body" style="padding: 0;">
+    <pre style="margin: 0; background: var(--bg2); padding: 16px; border-radius: 0 0 10px 10px; overflow-x: auto;"><code [innerHTML]="highlightCode(test.test_code)"></code></pre>
+  </div>
+</div>

@@ -1,0 +1,81 @@
+<div class="panel-header">
+  <div class="panel-title">
+    <svg class="panel-title-icon" viewBox="0 0 18 18" fill="none">
+      <rect x="1" y="2" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M5 6h8M5 9h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+    Agent Controls
+  </div>
+  <button class="panel-action example-btn" (click)="loadExample.emit()">Load example ↗</button>
+</div>
+<div class="input-section">
+  <div class="url-row">
+    <input class="url-input" 
+           [ngModel]="prUrl" 
+           (ngModelChange)="prUrlChange.emit($event)"
+           placeholder="https://github.com/owner/repo/pull/42" autocomplete="off"/>
+    <button class="fetch-btn" (click)="fetchPrDiff.emit()">Fetch</button>
+  </div>
+
+  <!-- Advanced Model & API Key Selection -->
+  <div class="config-stack">
+    <div class="select-wrapper">
+      <select class="url-input" 
+              [ngModel]="selectedProvider" 
+              (ngModelChange)="selectedProviderChange.emit($event); onProviderChange()">
+        <option value="gemini">Google Gemini</option>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="groq">Groq (Llama/Mistral)</option>
+      </select>
+      <span class="select-chevron">▼</span>
+    </div>
+
+    <div class="select-wrapper">
+      <select class="url-input" 
+              [ngModel]="selectedModel" 
+              (ngModelChange)="selectedModelChange.emit($event); onModelChange()">
+        <option *ngFor="let m of currentModelOptions" [value]="m.value">{{ m.label }}</option>
+      </select>
+      <span class="select-chevron">▼</span>
+    </div>
+
+    <input class="url-input" type="password" 
+           [ngModel]="userApiKey" 
+           (ngModelChange)="userApiKeyChange.emit($event); onSaveSettings()" 
+           placeholder="LLM API Key (Optional)" autocomplete="off"/>
+           
+    <div class="field-group">
+      <div class="field-label">GITHUB PAT (REQUIRED FOR COMMENTS)</div>
+      <input class="url-input" type="password" 
+             [ngModel]="githubToken" 
+             (ngModelChange)="tokenInputChange.emit($event)"
+             placeholder="Enter GitHub PAT and press Enter" autocomplete="off"/>
+    </div>
+  </div>
+  
+  <div class="options-row">
+    <label class="option-chip">
+      <input type="checkbox" [(ngModel)]="opts.security"/>
+      <span class="option-label">🔐 Security</span>
+    </label>
+    <label class="option-chip">
+      <input type="checkbox" [(ngModel)]="opts.performance"/>
+      <span class="option-label">⚡ Perf</span>
+    </label>
+    <label class="option-chip">
+      <input type="checkbox" [(ngModel)]="opts.style"/>
+      <span class="option-label">🎨 Style</span>
+    </label>
+    <label class="option-chip">
+      <input type="checkbox" [(ngModel)]="opts.selfCritique"/>
+      <span class="option-label">🧠 Critique</span>
+    </label>
+  </div>
+  
+  <!-- Analyze Button: Only Shown when diff exists -->
+  <button *ngIf="diffInput" class="analyze-btn" [disabled]="isAnalyzing" (click)="startAnalysis.emit()">
+    <span>{{ isAnalyzing ? '⏳ Running...' : '⚡ Analyze PR' }}</span>
+  </button>
+</div>

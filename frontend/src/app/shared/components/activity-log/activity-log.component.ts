@@ -23,7 +23,7 @@ export interface LogEntry {
     </div>
   `,
   styles: [`
-    :host { display: block; }
+    :host { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   `]
 })
 export class ActivityLogComponent {

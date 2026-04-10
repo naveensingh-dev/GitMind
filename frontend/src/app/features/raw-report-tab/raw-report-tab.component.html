@@ -1,0 +1,38 @@
+<!-- Report Actions Bar -->
+<div class="report-actions-bar">
+  <div class="report-meta">
+    <div class="report-meta-badge">
+      <span class="meta-dot"></span>
+      AI-Generated Report
+    </div>
+    <div class="report-meta-model" *ngIf="analysisData">
+      <svg viewBox="0 0 14 14" fill="none" class="meta-icon">
+        <circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M7 4v3l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      Reviewed by {{ selectedModel }}
+    </div>
+    <div class="report-meta-stats" *ngIf="analysisData">
+      <span class="meta-stat high">{{ analysisData?.security?.length || 0 }} Security</span>
+      <span class="meta-stat med">{{ analysisData?.performance?.length || 0 }} Perf</span>
+      <span class="meta-stat low">{{ analysisData?.style?.length || 0 }} Style</span>
+    </div>
+  </div>
+  <div class="report-actions-right">
+    <button class="report-action-btn" (click)="copyReportAction.emit()" title="Copy as Markdown">
+      <svg viewBox="0 0 16 16" fill="none">
+        <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h6A1.5 1.5 0 0 1 14 3.5v6A1.5 1.5 0 0 1 12.5 11H11" stroke="currentColor" stroke-width="1.2"/>
+      </svg>
+      Copy Markdown
+    </button>
+  </div>
+</div>
+
+<!-- Report Body -->
+<div class="report-body-wrap">
+  <div class="report-gutter">
+    <div class="gutter-line"></div>
+  </div>
+  <div class="markdown-report" [innerHTML]="renderedReport"></div>
+</div>

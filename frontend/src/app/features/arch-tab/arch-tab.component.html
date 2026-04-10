@@ -1,0 +1,18 @@
+<div class="summary-box" style="margin-bottom: 20px; border-color: rgba(255, 105, 180, 0.2);">
+  <div class="group-title" style="color: #ff69b4;">Architecture Review</div>
+  <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ archReview?.summary }}</p>
+</div>
+<div class="mermaid-container" *ngIf="archReview?.mermaid_code" style="background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; overflow-x: auto;">
+  <pre class="mermaid" style="margin: 0; color: black;">{{ archReview?.mermaid_code }}</pre>
+</div>
+
+<div class="group-title" style="margin: 20px 0 10px;">Architectural Observations</div>
+<div *ngFor="let obs of archReview?.observations" class="review-card open">
+  <div class="review-card-header">
+    <span class="severity-pill" [ngClass]="'sev-' + (obs.severity === 'critical' ? 'high' : obs.severity === 'warning' ? 'medium' : 'low')">{{ obs.type }}</span>
+    <span class="card-issue">{{ obs.description }}</span>
+  </div>
+  <div class="review-card-body" *ngIf="obs.files_involved?.length">
+    <div class="code-block">{{ obs.files_involved.join(', ') }}</div>
+  </div>
+</div>

@@ -1,0 +1,18 @@
+<div class="history-section" *ngIf="analysisHistory.length > 0">
+  <div class="history-header">
+    <span class="history-title">📂 Recent Analyses</span>
+  </div>
+  <div class="history-list">
+    <div class="history-item" *ngFor="let h of analysisHistory.slice(0, 8)" (click)="loadPastAnalysisAction.emit(h)">
+      <div class="history-item-top">
+        <span class="history-status" [ngClass]="'status-' + h.approval_status">{{ h.approval_status === 'approved' ? '✓' : h.approval_status === 'rejected' ? '✗' : '!' }}</span>
+        <span class="history-repo">{{ h.repo }}</span>
+      </div>
+      <div class="history-item-meta">
+        <span>{{ h.model }}</span>
+        <span>{{ h.security_count + h.performance_count + h.style_count }} findings</span>
+        <span>{{ h.created_at | date:'short' }}</span>
+      </div>
+    </div>
+  </div>
+</div>

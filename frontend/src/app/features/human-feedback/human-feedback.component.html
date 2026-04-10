@@ -1,0 +1,12 @@
+<div class="feedback-section" *ngIf="isAwaitingFeedback">
+  <div class="section-label">Human-in-the-Loop Refinement</div>
+  <div class="feedback-box">
+    <textarea class="feedback-input" 
+              [ngModel]="userFeedback" 
+              (ngModelChange)="userFeedbackChange.emit($event)"
+              placeholder="Provide feedback to refine the AI review (e.g., 'Ignore the hardcoded secret, it\'s a test file')"></textarea>
+    <button class="submit-feedback-btn" (click)="submitFeedbackAction.emit()">
+      <span>Apply Refinement 🚀</span>
+    </button>
+  </div>
+</div>

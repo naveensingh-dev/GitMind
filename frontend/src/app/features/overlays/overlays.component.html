@@ -1,0 +1,19 @@
+<!-- ERROR OVERLAY -->
+<div class="error-overlay" *ngIf="errorMessage">
+  <div class="error-modal">
+    <div class="error-icon">⚠️</div>
+    <div class="error-title">SYSTEM ALERT</div>
+    <div class="error-body">{{ errorMessage }}</div>
+    <button class="error-close" (click)="clearErrorAction.emit()">ACKNOWLEDGE</button>
+  </div>
+</div>
+
+<!-- SUCCESS OVERLAY -->
+<div class="error-overlay" *ngIf="successMessage" style="z-index: 9999;">
+  <div class="error-modal" style="border-color: rgba(52, 211, 153, 0.4); box-shadow: 0 0 20px rgba(52, 211, 153, 0.1);">
+    <div class="error-icon" style="color: #34d399;">✅</div>
+    <div class="error-title" style="color: #34d399;">SUCCESS</div>
+    <div class="error-body" style="color: #a7f3d0;">{{ successMessage }}</div>
+    <button class="error-close" style="border-color: rgba(52, 211, 153, 0.3); color: #34d399;" (click)="clearSuccessAction.emit()">AWESOME</button>
+  </div>
+</div>

@@ -1,198 +1,61 @@
 <!-- HEADER -->
 <app-header [refinementCount]="refinementCount()"></app-header>
 
-<!-- ERROR OVERLAY -->
-<div class="error-overlay" *ngIf="errorMessage()">
-  <div class="error-modal">
-    <div class="error-icon">⚠️</div>
-    <div class="error-title">SYSTEM ALERT</div>
-    <div class="error-body">{{ errorMessage() }}</div>
-    <button class="error-close" (click)="clearError()">ACKNOWLEDGE</button>
-  </div>
-</div>
-
-<!-- SUCCESS OVERLAY -->
-<div class="error-overlay" *ngIf="successMessage()" style="z-index: 9999;">
-  <div class="error-modal" style="border-color: rgba(52, 211, 153, 0.4); box-shadow: 0 0 20px rgba(52, 211, 153, 0.1);">
-    <div class="error-icon" style="color: #34d399;">✅</div>
-    <div class="error-title" style="color: #34d399;">SUCCESS</div>
-    <div class="error-body" style="color: #a7f3d0;">{{ successMessage() }}</div>
-    <button class="error-close" style="border-color: rgba(52, 211, 153, 0.3); color: #34d399;" (click)="clearSuccess()">AWESOME</button>
-  </div>
-</div>
+<app-overlays 
+  [errorMessage]="errorMessage()" 
+  [successMessage]="successMessage()" 
+  (clearErrorAction)="clearError()" 
+  (clearSuccessAction)="clearSuccess()">
+</app-overlays>
 
 <!-- APP -->
 <div class="app" [class.no-sidebar]="!diffInput()">
-  <!-- SIDEBAR (File Tree) -->
-  <div class="sidebar" *ngIf="diffInput()">
-    <div class="sidebar-header">
-      <div class="panel-title">
-        <svg class="panel-title-icon" viewBox="0 0 18 18" fill="none">
-          <path d="M3 3h12v12H3V3z" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M7 3v12" stroke="currentColor" stroke-width="1.2"/>
-        </svg>
-        Files
-      </div>
-    </div>
-    <div class="sidebar-content">
-      <app-file-tree [files]="filePaths()" [selectedPath]="selectedFilePath()" (fileSelect)="scrollToFile($event)"></app-file-tree>
-    </div>
-
-    <!-- Analysis History -->
-    <div class="history-section" *ngIf="analysisHistory().length > 0">
-      <div class="history-header">
-        <span class="history-title">📂 Recent Analyses</span>
-      </div>
-      <div class="history-list">
-        <div class="history-item" *ngFor="let h of analysisHistory().slice(0, 8)" (click)="loadPastAnalysis(h)">
-          <div class="history-item-top">
-            <span class="history-status" [ngClass]="'status-' + h.approval_status">{{ h.approval_status === 'approved' ? '✓' : h.approval_status === 'rejected' ? '✗' : '!' }}</span>
-            <span class="history-repo">{{ h.repo }}</span>
-          </div>
-          <div class="history-item-meta">
-            <span>{{ h.model }}</span>
-            <span>{{ h.security_count + h.performance_count + h.style_count }} findings</span>
-            <span>{{ h.created_at | date:'short' }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <app-sidebar-layout
+    *ngIf="diffInput()"
+    [diffInput]="diffInput()"
+    [filePaths]="filePaths()"
+    [selectedFilePath]="selectedFilePath()"
+    (scrollToFileAction)="scrollToFile($event)">
+  </app-sidebar-layout>
 
   <!-- LEFT PANEL -->
   <div class="left-panel">
-    <div class="panel-header">
-      <div class="panel-title">
-        <svg class="panel-title-icon" viewBox="0 0 18 18" fill="none">
-          <rect x="1" y="2" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.2"/>
-          <path d="M5 6h8M5 9h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
-        Agent Controls
-      </div>
-      <button class="panel-action example-btn" (click)="loadExample()">Load example ↗</button>
-    </div>
-    <div class="input-section">
-      <div class="url-row">
-        <input class="url-input" 
-               [ngModel]="prUrl()" 
-               (ngModelChange)="prUrl.set($event)"
-               placeholder="https://github.com/owner/repo/pull/42" autocomplete="off"/>
-        <button class="fetch-btn" (click)="fetchPrDiff()">Fetch</button>
-      </div>
-
-      <!-- Advanced Model & API Key Selection -->
-      <div class="config-row" style="display: flex; flex-direction: column; gap: 8px;">
-        <div class="select-wrapper" style="position: relative;">
-          <select class="url-input" 
-                  [ngModel]="selectedProvider()" 
-                  (ngModelChange)="selectedProvider.set($event); onProviderChange()" 
-                  style="width: 100%; appearance: none; cursor: pointer;">
-            <option value="gemini">Google Gemini</option>
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="groq">Groq (Llama/Mistral)</option>
-          </select>
-          <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 10px; opacity: 0.5;">▼</span>
-        </div>
-
-        <div class="select-wrapper" style="position: relative;">
-          <select class="url-input" 
-                  [ngModel]="selectedModel()" 
-                  (ngModelChange)="selectedModel.set($event); onModelChange()" 
-                  style="width: 100%; appearance: none; cursor: pointer;">
-            <option *ngFor="let m of currentModelOptions()" [value]="m.value">{{ m.label }}</option>
-          </select>
-          <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 10px; opacity: 0.5;">▼</span>
-        </div>
-
-        <input class="url-input" type="password" 
-               [ngModel]="userApiKey()" 
-               (ngModelChange)="userApiKey.set($event); saveSettings()" 
-               placeholder="LLM API Key (Optional)" autocomplete="off"/>
-               
-        <div style="display: flex; flex-direction: column; gap: 4px;">
-          <div style="font-size: 10px; color: var(--text3); font-family: var(--mono); margin-left: 4px;">GITHUB PAT (REQUIRED FOR COMMENTS)</div>
-          <input class="url-input" type="password" 
-                 [ngModel]="githubToken()" 
-                 (ngModelChange)="onTokenInputChange($event)"
-                 placeholder="Enter GitHub PAT and press Enter" autocomplete="off"/>
-        </div>
-      </div>
-      
-      <div class="options-row">
-        <label class="option-chip">
-          <input type="checkbox" [(ngModel)]="opts.security"/>
-          <span class="option-label">🔐 Security</span>
-        </label>
-        <label class="option-chip">
-          <input type="checkbox" [(ngModel)]="opts.performance"/>
-          <span class="option-label">⚡ Perf</span>
-        </label>
-        <label class="option-chip">
-          <input type="checkbox" [(ngModel)]="opts.style"/>
-          <span class="option-label">🎨 Style</span>
-        </label>
-        <label class="option-chip">
-          <input type="checkbox" [(ngModel)]="opts.selfCritique"/>
-          <span class="option-label">🧠 Critique</span>
-        </label>
-      </div>
-      
-      <!-- Analyze Button: Only Shown when diff exists -->
-      <button *ngIf="diffInput()" class="analyze-btn" [disabled]="isAnalyzing()" (click)="startAnalysis()">
-        <span>{{ isAnalyzing() ? '⏳ Running...' : '⚡ Analyze PR' }}</span>
-      </button>
-    </div>
+    <app-agent-controls
+      [prUrl]="prUrl()"
+      [diffInput]="diffInput()"
+      [isAnalyzing]="isAnalyzing()"
+      [selectedProvider]="selectedProvider()"
+      [selectedModel]="selectedModel()"
+      [currentModelOptions]="currentModelOptions()"
+      [userApiKey]="userApiKey()"
+      [githubToken]="githubToken()"
+      [opts]="opts"
+      (prUrlChange)="prUrl.set($event)"
+      (fetchPrDiff)="fetchPrDiff()"
+      (selectedProviderChange)="selectedProvider.set($event)"
+      (selectedModelChange)="selectedModel.set($event)"
+      (providerChangeAction)="onProviderChange()"
+      (modelChangeAction)="onModelChange()"
+      (userApiKeyChange)="userApiKey.set($event)"
+      (saveSettings)="saveSettings()"
+      (githubTokenChange)="githubToken.set($event)"
+      (tokenInputChange)="onTokenInputChange($event)"
+      (loadExample)="loadExample()"
+      (startAnalysis)="startAnalysis()">
+    </app-agent-controls>
 
     <!-- PIPELINE -->
     <div class="pipeline-section">
-      <div class="section-label">State Machine</div>
-      <div class="pipeline">
-        <div class="pipe-node" [class]="nodeStates()['input']">
-          <div class="node-circle"><div class="node-spin"></div><span>📥</span></div>
-          <div class="node-label">Parse</div>
-        </div>
-        <div class="pipe-node" [class]="nodeStates()['multi_review']">
-          <div class="node-circle"><div class="node-spin"></div><span>🔍</span></div>
-          <div class="node-label">Multi<br>Review</div>
-        </div>
-        <div class="pipe-node" [class]="nodeStates()['arbitrate']">
-          <div class="node-circle"><div class="node-spin"></div><span>🔀</span></div>
-          <div class="node-label">Merge</div>
-        </div>
-        <div class="pipe-node" [class]="nodeStates()['critique']">
-          <div class="node-circle"><div class="node-spin"></div><span>🧠</span></div>
-          <div class="node-label">Critique</div>
-        </div>
-        <div class="pipe-node" [class]="nodeStates()['human_review']">
-          <div class="node-circle"><div class="node-spin"></div><span>👤</span></div>
-          <div class="node-label">Human</div>
-        </div>
-        <div class="pipe-node" [class]="nodeStates()['refine']">
-          <div class="node-circle"><div class="node-spin"></div><span>🔄</span></div>
-          <div class="node-label">Refine</div>
-        </div>
-        <div class="pipe-node" [class]="nodeStates()['output']">
-          <div class="node-circle"><div class="node-spin"></div><span>✅</span></div>
-          <div class="node-label">Final</div>
-        </div>
-      </div>
+      <app-pipeline-visualizer [nodeStates]="nodeStates()"></app-pipeline-visualizer>
     </div>
 
-    <!-- HUMAN FEEDBACK UI -->
-    <div class="feedback-section" *ngIf="isAwaitingFeedback()">
-      <div class="section-label">Human-in-the-Loop Refinement</div>
-      <div class="feedback-box">
-        <textarea class="feedback-input" 
-                  [ngModel]="userFeedback()" 
-                  (ngModelChange)="userFeedback.set($event)"
-                  placeholder="Provide feedback to refine the AI review (e.g., 'Ignore the hardcoded secret, it's a test file')"></textarea>
-        <button class="submit-feedback-btn" (click)="submitFeedback()">
-          <span>Apply Refinement 🚀</span>
-        </button>
-      </div>
-    </div>
+    <!-- HUMAN FEEDBACK UI Extracted -->
+    <app-human-feedback
+      [isAwaitingFeedback]="isAwaitingFeedback()"
+      [userFeedback]="userFeedback()"
+      (userFeedbackChange)="userFeedback.set($event)"
+      (submitFeedbackAction)="submitFeedback()">
+    </app-human-feedback>
 
     <!-- LOG -->
     <app-activity-log [logs]="logs()"></app-activity-log>
@@ -200,60 +63,38 @@
 
   <!-- RIGHT PANEL -->
   <div class="right-panel">
-    <div class="panel-header">
-      <div class="panel-title">
-        Code & Review Report
-      </div>
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <span *ngIf="analysisData()" class="header-badge" style="background: rgba(56, 212, 245, 0.08); border-color: rgba(56, 212, 245, 0.2); color: var(--cyan);">
-          Reviewed by: {{ selectedModel() }}
-        </span>
-        <div *ngIf="diffInput()" class="stats-badge">
-          <span class="stat-files">{{ totalStats().files }} files changed</span>
-          <span class="stat-adds">+{{ totalStats().additions }}</span>
-          <span class="stat-dels">-{{ totalStats().deletions }}</span>
-        </div>
-      </div>
-    </div>
+    <app-report-header
+      [diffInput]="diffInput()"
+      [analysisData]="analysisData()"
+      [selectedModel]="selectedModel()"
+      [totalStats]="totalStats()">
+    </app-report-header>
     
     <div class="results-area">
       <!-- Placeholder when nothing is loaded -->
-      <div class="results-placeholder" *ngIf="!diffInput() && !analysisData()">
+      <div class="results-placeholder" *ngIf="!diffInput() && !analysisData() && !analysisHistory().length">
         <div class="placeholder-icon">🚀</div>
         <div class="placeholder-text">Enter a GitHub URL or load an example<br>to begin the automated code review.</div>
       </div>
 
       <!-- Main Content Area -->
-      <div class="results-content" *ngIf="diffInput() || analysisData()">
+      <div class="results-content" *ngIf="diffInput() || analysisData() || analysisHistory().length">
         
-        <!-- Agent Thinking Block -->
-        <div class="agent-thinking-block" *ngIf="isAnalyzing()">
-          <div class="thinking-header">
-            <svg class="gemini-sparkle spin" viewBox="0 0 24 24" fill="none" width="20" height="20">
-               <path d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z" fill="currentColor"/>
-            </svg>
-            <span class="thinking-title">GitMind is thinking...</span>
-          </div>
-          <div class="thinking-logs">
-            <div class="thinking-log-row auto-scroll-fade" *ngFor="let log of logs()">
-              <span class="t-log-time">{{ log.time }}</span>
-              <span class="t-log-msg" [class.error]="log.type === 'error'" [class.success]="log.type === 'success' || (log.msg && log.msg.includes('✓'))">{{ log.msg }}</span>
-            </div>
-          </div>
-        </div>
+        <app-thinking-logs [isAnalyzing]="isAnalyzing()" [logs]="logs()"></app-thinking-logs>
 
-        <div class="tabs-bar" *ngIf="!isAnalyzing() || analysisData()">
-          <div class="tab" [class.active]="currentTab() === 'diff'" (click)="switchTab('diff')" *ngIf="diffInput()">🔍 Diff</div>
-          <div class="tab" [class.active]="currentTab() === 'analytics'" (click)="switchTab('analytics')" *ngIf="dashboardMetrics()">📊 Analytics</div>
-          <div class="tab" [class.active]="currentTab() === 'summary'" (click)="switchTab('summary')" *ngIf="analysisData()">📋 Summary</div>
-          <div class="tab" [class.active]="currentTab() === 'security'" (click)="switchTab('security')" *ngIf="analysisData()">🔐 Security</div>
-          <div class="tab" [class.active]="currentTab() === 'performance'" (click)="switchTab('performance')" *ngIf="analysisData()">⚡ Performance</div>
-          <div class="tab" [class.active]="currentTab() === 'style'" (click)="switchTab('style')" *ngIf="analysisData()">🎨 Style</div>
-          <div class="tab" [class.active]="currentTab() === 'autofix'" (click)="switchTab('autofix')" *ngIf="autoFixes()">🔧 Auto-Fix</div>
-          <div class="tab" [class.active]="currentTab() === 'tests'" (click)="switchTab('tests')" *ngIf="generatedTests()">🧪 Tests</div>
-          <div class="tab" [class.active]="currentTab() === 'arch'" (click)="switchTab('arch')" *ngIf="archReview()">🏗️ Arch</div>
-          <div class="tab" [class.active]="currentTab() === 'report'" (click)="switchTab('report')" *ngIf="analysisData()">📄 Raw Report</div>
-        </div>
+        <app-tabs-bar
+          *ngIf="!isAnalyzing() || analysisData()"
+          [currentTab]="currentTab()"
+          [diffInput]="diffInput()"
+          [isAnalyzing]="isAnalyzing()"
+          [analysisHistory]="analysisHistory()"
+          [analysisData]="analysisData()"
+          [dashboardMetrics]="dashboardMetrics()"
+          [autoFixes]="autoFixes()"
+          [generatedTests]="generatedTests()"
+          [archReview]="archReview()"
+          (switchTabAction)="switchTab($event)">
+        </app-tabs-bar>
 
         <div class="tab-panels">
           <!-- Skeleton loader shown during tab transitions -->
@@ -266,287 +107,65 @@
 
           <!-- Analytics Dashboard Tab -->
           <div class="tab-panel active" *ngIf="currentTab() === 'analytics' && dashboardMetrics()">
-            <div class="analytics-header">
-              <h2>GitMind Intelligence Dashboard</h2>
-              <p>Aggregate insights across the repository's analysis history.</p>
-            </div>
-            
-            <div class="kpi-grid">
-              <div class="kpi-card">
-                <span class="kpi-value">{{ dashboardMetrics().totalReviews }}</span>
-                <span class="kpi-label">Reviews Run</span>
-              </div>
-              <div class="kpi-card">
-                <span class="kpi-value text-red">{{ dashboardMetrics().highSev }}</span>
-                <span class="kpi-label">High-Severity Findings</span>
-              </div>
-              <div class="kpi-card">
-                <span class="kpi-value text-purple">{{ dashboardMetrics().totalThreats }}</span>
-                <span class="kpi-label">Total Code Smells Blocked</span>
-              </div>
-              <div class="kpi-card">
-                <span class="kpi-value">{{ dashboardMetrics().avgConf }}%</span>
-                <span class="kpi-label">Avg AI Confidence</span>
-              </div>
-            </div>
-
-            <div class="chart-section">
-              <h3>Findings Distribution</h3>
-              <div class="stacked-bar">
-                <div class="bar-segment sec" [style.width.%]="dashboardMetrics().secPct" title="Security: {{ dashboardMetrics().sumSec }}"></div>
-                <div class="bar-segment perf" [style.width.%]="dashboardMetrics().perfPct" title="Performance: {{ dashboardMetrics().sumPerf }}"></div>
-                <div class="bar-segment style" [style.width.%]="dashboardMetrics().stylePct" title="Style: {{ dashboardMetrics().sumStyle }}"></div>
-              </div>
-              <div class="legend">
-                <span><span class="dot sec"></span>Security ({{ dashboardMetrics().sumSec }})</span>
-                <span><span class="dot perf"></span>Performance ({{ dashboardMetrics().sumPerf }})</span>
-                <span><span class="dot style"></span>Style ({{ dashboardMetrics().sumStyle }})</span>
-              </div>
-            </div>
+            <app-analytics-dashboard [metrics]="dashboardMetrics()!"></app-analytics-dashboard>
           </div>
 
 
+          <!-- History Tab -->
+          <div class="tab-panel active" *ngIf="currentTab() === 'history'">
+            <app-analysis-history 
+              [analysisHistory]="analysisHistory()" 
+              (loadPastAnalysisAction)="loadPastAnalysis($event)">
+            </app-analysis-history>
+          </div>
+
           <!-- Diff Tab — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'diff'">
-            <div class="diff-container">
-              <div *ngFor="let file of parsedFiles(); trackBy: trackByPath" class="file-block" [id]="'file-' + file.path">
-                <div class="file-header" (click)="toggleFile(file)">
-                  <span class="chevron" [class.open]="file.isOpen">▼</span>
-                  <span class="file-path">{{ file.path }}</span>
-                  <div class="file-stats">
-                    <span class="add">+{{ file.additions }}</span>
-                    <span class="del">-{{ file.deletions }}</span>
-                  </div>
-                </div>
-                
-                <div *ngIf="file.isOpen" class="file-content">
-                  <div *ngFor="let hunk of file.hunks; trackBy: trackByIndex" class="hunk">
-                    <div class="hunk-header">{{ hunk.header }}</div>
-                    <div *ngFor="let line of hunk.lines; trackBy: trackByIndex" [class]="'diff-line ' + line.type">
-                      <div class="line-numbers">
-                        <span class="num">{{ line.leftLine || '' }}</span>
-                        <span class="num">{{ line.rightLine || '' }}</span>
-                      </div>
-                      <div class="line-content" [innerHTML]="highlightCode(line.content)"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <app-diff-viewer [files]="parsedFiles()"></app-diff-viewer>
           </div>
 
           <!-- Summary Tab — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'summary'">
-            <div class="approval-strip" *ngIf="getApprovalInfo()">
-                <div class="approval-main">
-                  <span class="approval-icon">{{ getApprovalInfo()?.icon }}</span>
-                  <div>
-                    <div class="approval-title" [ngClass]="getApprovalInfo()?.cls">{{ getApprovalInfo()?.label }}</div>
-                    <div class="approval-sub">{{ getApprovalInfo()?.sub }}</div>
-                 </div>
-               </div>
-               <div class="approval-score" *ngIf="analysisData()?.confidence_score">
-                 <div class="score-num">{{ analysisData()?.confidence_score }}%</div>
-                 <div class="score-label">Confidence</div>
-               </div>
-            </div>
-
-            <div class="summary-box">
-              <div class="group-title" style="margin-bottom: 16px;">Executive Summary</div>
-              <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ analysisData()?.summary }}</p>
-              
-              <div class="conf-bar-wrap" *ngIf="analysisData()?.confidence_score">
-                <div class="conf-bar-label">
-                  <span>AI Confidence Level</span>
-                  <span>{{ analysisData()?.confidence_score }}%</span>
-                </div>
-                <div class="conf-bar-track">
-                  <div class="conf-bar-fill" [style.width.%]="analysisData()?.confidence_score"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Critic Corner -->
-            <div class="summary-box critique-box" *ngIf="critiqueData()" style="margin-top: 20px; border-color: rgba(167, 139, 250, 0.2);">
-              <div class="group-title" style="margin-bottom: 16px; color: var(--purple);">🧠 Critic's Corner</div>
-              <div style="display: flex; align-items: flex-start; gap: 20px;">
-                <div class="critique-score-circle">
-                  <span class="score-val">{{ critiqueData()?.score }}</span>
-                  <span class="score-lbl">Quality</span>
-                </div>
-                <div style="flex: 1;">
-                  <div style="font-size: 12px; color: var(--text3); font-family: var(--mono); margin-bottom: 8px;">SELF-CORRECTION FEEDBACK:</div>
-                  <p style="margin: 0; font-size: 13px; line-height: 1.6; color: var(--text2); font-style: italic;">
-                    "{{ critiqueData()?.feedback || 'The review was deemed accurate and requires no further refinement.' }}"
-                  </p>
-                </div>
-              </div>
-            </div>
+            <app-summary-tab [analysisData]="analysisData()" [critiqueData]="critiqueData()"></app-summary-tab>
           </div>
           
           <!-- Category Panels — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'security'">
-            <div *ngIf="analysisData()?.security?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No security issues found.</div>
-            <div *ngFor="let item of analysisData()?.security; trackBy: trackByIssue" class="review-card open">
-              <div class="review-card-header">
-                <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
-                <span class="confidence-badge" [class.high]="item.confidence >= 90" [class.medium]="item.confidence >= 70 && item.confidence < 90" [class.low]="item.confidence < 70" *ngIf="item.confidence">🎯 {{ item.confidence }}%</span>
-                <span class="card-issue">{{ item.issue }}</span>
-                <button class="push-github-btn" (click)="pushToGithub(item)">Push Suggestion ↗</button>
-              </div>
-              <div class="review-card-body">
-                <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
-                <div class="fix-label">💡 Suggested fix (Editable):</div>
-                <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
-              </div>
-            </div>
+            <app-review-panel [items]="analysisData()?.security || []" [categoryName]="'Security'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'performance'">
-            <div *ngIf="analysisData()?.performance?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No performance issues found.</div>
-            <div *ngFor="let item of analysisData()?.performance; trackBy: trackByIssue" class="review-card open">
-              <div class="review-card-header">
-                <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
-                <span class="confidence-badge" [class.high]="item.confidence >= 90" [class.medium]="item.confidence >= 70 && item.confidence < 90" [class.low]="item.confidence < 70" *ngIf="item.confidence">🎯 {{ item.confidence }}%</span>
-                <span class="card-issue">{{ item.issue }}</span>
-                <button class="push-github-btn" (click)="pushToGithub(item)">Push Suggestion ↗</button>
-              </div>
-              <div class="review-card-body">
-                <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
-                <div class="fix-label">💡 Suggested fix (Editable):</div>
-                <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
-              </div>
-            </div>
+            <app-review-panel [items]="analysisData()?.performance || []" [categoryName]="'Performance'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'style'">
-            <div *ngIf="analysisData()?.style?.length === 0" class="placeholder-text" style="padding: 40px;">✓ No style issues found.</div>
-            <div *ngFor="let item of analysisData()?.style; trackBy: trackByIssue" class="review-card open">
-              <div class="review-card-header">
-                <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
-                <span class="confidence-badge" [class.high]="item.confidence >= 90" [class.medium]="item.confidence >= 70 && item.confidence < 90" [class.low]="item.confidence < 70" *ngIf="item.confidence">🎯 {{ item.confidence }}%</span>
-                <span class="card-issue">{{ item.issue }}</span>
-                <button class="push-github-btn" (click)="pushToGithub(item)">Push Suggestion ↗</button>
-              </div>
-              <div class="review-card-body">
-                <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
-                <div class="fix-label">💡 Suggested fix (Editable):</div>
-                <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
-              </div>
-            </div>
+            <app-review-panel [items]="analysisData()?.style || []" [categoryName]="'Style'" (pushToGithub)="pushToGithub($event)"></app-review-panel>
           </div>
 
+          <!-- Auto Fix Tab — Extracted Component -->
           <div class="tab-panel active" *ngIf="currentTab() === 'autofix'">
-            <div class="summary-box" style="margin-bottom: 20px;">
-              <div class="group-title">Agent Generated Patches</div>
-              <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ autoFixes()?.summary }}</p>
-            </div>
-            <div *ngIf="autoFixes()?.fixes?.length === 0" class="placeholder-text" style="padding: 40px;">No auto-fixes generated.</div>
-            <div *ngFor="let fix of autoFixes()?.fixes" class="review-card open autofix-card">
-              <div class="review-card-header" style="justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span class="severity-pill" [ngClass]="'sev-' + fix.severity">{{ fix.severity }}</span>
-                  <span class="card-issue" style="font-family: var(--mono); color: var(--g);">{{ fix.file_path }}</span>
-                </div>
-                <button class="push-github-btn" 
-                        [class.danger-btn]="!fix.is_safe" 
-                        [disabled]="applyingFixFor() === fix.file_path"
-                        (click)="applyFix(fix)">
-                  {{ applyingFixFor() === fix.file_path ? 'Applying...' : (fix.is_safe ? 'One-Click Apply ↗' : 'Apply (Unsafe) ↗') }}
-                </button>
-              </div>
-              <div class="review-card-body" style="padding: 16px;">
-                <p style="margin-top: 0; color: var(--text2); font-size: 13px;">{{ fix.description }}</p>
-                <div class="diff-split-view">
-                  <div class="diff-half diff-original">
-                     <div class="diff-header">Original</div>
-                     <pre><code [innerHTML]="highlightCode(fix.original_code)"></code></pre>
-                  </div>
-                  <div class="diff-half diff-fixed">
-                     <div class="diff-header">Fixed</div>
-                     <pre><code [innerHTML]="highlightCode(fix.fixed_code)"></code></pre>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <app-autofix-panel 
+              [autoFixes]="autoFixes()" 
+              [applyingFixFor]="applyingFixFor()" 
+              (applyFixSelected)="applyFix($event)">
+            </app-autofix-panel>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'tests'">
-             <div class="summary-box" style="margin-bottom: 20px; border-color: rgba(0, 191, 255, 0.2);">
-                <div class="group-title" style="color: #00bfff;">Generated Unit Tests</div>
-                <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ generatedTests()?.summary }}</p>
-             </div>
-             <div *ngFor="let test of generatedTests()?.tests" class="review-card open">
-               <div class="review-card-header">
-                 <span class="card-issue" style="color: #00bfff;">{{ test.test_file_path }}</span>
-                 <span class="severity-pill" style="background: rgba(0, 191, 255, 0.15); color: #00bfff;">{{ test.test_framework }}</span>
-               </div>
-               <div class="review-card-body" style="padding: 0;">
-                 <pre style="margin: 0; background: var(--bg2); padding: 16px; border-radius: 0 0 10px 10px; overflow-x: auto;"><code [innerHTML]="highlightCode(test.test_code)"></code></pre>
-               </div>
-             </div>
+            <app-tests-panel [generatedTests]="generatedTests()"></app-tests-panel>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'arch'">
-             <div class="summary-box" style="margin-bottom: 20px; border-color: rgba(255, 105, 180, 0.2);">
-                <div class="group-title" style="color: #ff69b4;">Architecture Review</div>
-                <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ archReview()?.summary }}</p>
-             </div>
-             <div class="mermaid-container" *ngIf="archReview()?.mermaid_code" style="background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; overflow-x: auto;">
-                <pre class="mermaid" style="margin: 0; color: black;">{{ archReview()?.mermaid_code }}</pre>
-             </div>
-             
-             <div class="group-title" style="margin: 20px 0 10px;">Architectural Observations</div>
-             <div *ngFor="let obs of archReview()?.observations" class="review-card open">
-                <div class="review-card-header">
-                  <span class="severity-pill" [ngClass]="'sev-' + (obs.severity === 'critical' ? 'high' : obs.severity === 'warning' ? 'medium' : 'low')">{{ obs.type }}</span>
-                  <span class="card-issue">{{ obs.description }}</span>
-                </div>
-                <div class="review-card-body" *ngIf="obs.files_involved?.length">
-                  <div class="code-block">{{ obs.files_involved.join(', ') }}</div>
-                </div>
-             </div>
+            <app-arch-tab [archReview]="archReview()"></app-arch-tab>
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'report'">
-            <!-- Report Actions Bar -->
-            <div class="report-actions-bar">
-              <div class="report-meta">
-                <div class="report-meta-badge">
-                  <span class="meta-dot"></span>
-                  AI-Generated Report
-                </div>
-                <div class="report-meta-model" *ngIf="analysisData()">
-                  <svg viewBox="0 0 14 14" fill="none" class="meta-icon">
-                    <circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2"/>
-                    <path d="M7 4v3l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  </svg>
-                  Reviewed by {{ selectedModel() }}
-                </div>
-                <div class="report-meta-stats" *ngIf="analysisData()">
-                  <span class="meta-stat high">{{ analysisData()?.security?.length }} Security</span>
-                  <span class="meta-stat med">{{ analysisData()?.performance?.length }} Perf</span>
-                  <span class="meta-stat low">{{ analysisData()?.style?.length }} Style</span>
-                </div>
-              </div>
-              <div class="report-actions-right">
-                <button class="report-action-btn" (click)="copyReport()" title="Copy as Markdown">
-                  <svg viewBox="0 0 16 16" fill="none">
-                    <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
-                    <path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h6A1.5 1.5 0 0 1 14 3.5v6A1.5 1.5 0 0 1 12.5 11H11" stroke="currentColor" stroke-width="1.2"/>
-                  </svg>
-                  Copy Markdown
-                </button>
-              </div>
-            </div>
-
-            <!-- Report Body -->
-            <div class="report-body-wrap">
-              <div class="report-gutter">
-                <div class="gutter-line"></div>
-              </div>
-              <div class="markdown-report" [innerHTML]="renderedReport()"></div>
-            </div>
+            <app-raw-report-tab
+              [analysisData]="analysisData()"
+              [selectedModel]="selectedModel()"
+              [renderedReport]="renderedReport()"
+              (copyReportAction)="copyReport()">
+            </app-raw-report-tab>
           </div>
         </div>
       </div>

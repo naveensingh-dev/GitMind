@@ -1,0 +1,31 @@
+<div class="section-label">State Machine</div>
+<div class="pipeline">
+  <div class="pipe-node" [class]="nodeStates['input']">
+    <div class="node-circle"><div class="node-spin"></div><span>📥</span></div>
+    <div class="node-label">Parse</div>
+  </div>
+  <div class="pipe-node" [class]="nodeStates['multi_review']">
+    <div class="node-circle"><div class="node-spin"></div><span>🔍</span></div>
+    <div class="node-label">Multi<br>Review</div>
+  </div>
+  <div class="pipe-node" [class]="nodeStates['arbitrate']">
+    <div class="node-circle"><div class="node-spin"></div><span>🔀</span></div>
+    <div class="node-label">Merge</div>
+  </div>
+  <div class="pipe-node" [class]="nodeStates['critique']">
+    <div class="node-circle"><div class="node-spin"></div><span>🧠</span></div>
+    <div class="node-label">Critique</div>
+  </div>
+  <div class="pipe-node" [class]="nodeStates['human_review']">
+    <div class="node-circle"><div class="node-spin"></div><span>👤</span></div>
+    <div class="node-label">Human</div>
+  </div>
+  <div class="pipe-node" [class]="nodeStates['refine']">
+    <div class="node-circle"><div class="node-spin"></div><span>🔄</span></div>
+    <div class="node-label">Refine</div>
+  </div>
+  <div class="pipe-node" [class]="nodeStates['output']">
+    <div class="node-circle"><div class="node-spin"></div><span>✅</span></div>
+    <div class="node-label">Final</div>
+  </div>
+</div>

@@ -1,0 +1,22 @@
+<div *ngIf="items?.length === 0" class="placeholder-text" style="padding: 40px;">
+  ✓ No {{ categoryName }} issues found.
+</div>
+<div *ngFor="let item of items; trackBy: trackByItem" class="review-card open">
+  <div class="review-card-header">
+    <span class="severity-pill" [ngClass]="'sev-' + item.severity">{{ item.severity }}</span>
+    <span class="confidence-badge" 
+          [class.high]="(item.confidence || 0) >= 90" 
+          [class.medium]="(item.confidence || 0) >= 70 && (item.confidence || 0) < 90" 
+          [class.low]="(item.confidence || 0) < 70" 
+          *ngIf="item.confidence">
+      🎯 {{ item.confidence }}%
+    </span>
+    <span class="card-issue">{{ item.issue }}</span>
+    <button class="push-github-btn" (click)="onPushToGithub(item)">Push Suggestion ↗</button>
+  </div>
+  <div class="review-card-body">
+    <div class="code-block" *ngIf="item.line">{{ item.line }}</div>
+    <div class="fix-label">💡 Suggested fix (Editable):</div>
+    <textarea class="fix-textarea" [(ngModel)]="item.fix"></textarea>
+  </div>
+</div>

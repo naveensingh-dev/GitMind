@@ -1,0 +1,37 @@
+          <div class="analytics-header">
+            <h2>GitMind Intelligence Dashboard</h2>
+            <p>Aggregate insights across the repository's analysis history.</p>
+          </div>
+          
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <span class="kpi-value">{{ metrics.totalReviews }}</span>
+              <span class="kpi-label">Reviews Run</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-value text-red">{{ metrics.highSev }}</span>
+              <span class="kpi-label">High-Severity Findings</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-value text-purple">{{ metrics.totalThreats }}</span>
+              <span class="kpi-label">Total Code Smells Blocked</span>
+            </div>
+            <div class="kpi-card">
+              <span class="kpi-value">{{ metrics.avgConf }}%</span>
+              <span class="kpi-label">Avg AI Confidence</span>
+            </div>
+          </div>
+
+          <div class="chart-section">
+            <h3>Findings Distribution</h3>
+            <div class="stacked-bar">
+              <div class="bar-segment sec" [style.width.%]="metrics.secPct" title="Security: {{ metrics.sumSec }}"></div>
+              <div class="bar-segment perf" [style.width.%]="metrics.perfPct" title="Performance: {{ metrics.sumPerf }}"></div>
+              <div class="bar-segment style" [style.width.%]="metrics.stylePct" title="Style: {{ metrics.sumStyle }}"></div>
+            </div>
+            <div class="legend">
+              <span><span class="dot sec"></span>Security ({{ metrics.sumSec }})</span>
+              <span><span class="dot perf"></span>Performance ({{ metrics.sumPerf }})</span>
+              <span><span class="dot style"></span>Style ({{ metrics.sumStyle }})</span>
+            </div>
+          </div>
