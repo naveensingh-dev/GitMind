@@ -30,7 +30,7 @@
       {{ stagedFixes().length }} fix{{ stagedFixes().length === 1 ? '' : 'es' }} staged
     </span>
     <span style="font-size:11px; color:#888; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-      — {{ stagedFixes().slice(0,2).map(f => f.file_path.split('/').pop()).join(', ') }}{{ stagedFixes().length > 2 ? '…' : '' }}
+      {{ stagedFilesSummary() }}
     </span>
   </span>
 

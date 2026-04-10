@@ -92,6 +92,14 @@ export class App implements OnInit {
   // --- STAGING CART ---
   stagedFixes = signal<{ file_path: string; fixed_code: string; issue: string; item: ReviewItem }[]>([]);
   stagedItems = computed(() => this.stagedFixes().map(f => f.item));
+  stagedFilesSummary = computed(() => {
+    const fixes = this.stagedFixes();
+    if (fixes.length === 0) return '';
+    const names = fixes.slice(0, 2).map(f => f.file_path.split('/').pop() || '');
+    let summary = '— ' + names.join(', ');
+    if (fixes.length > 2) summary += '…';
+    return summary;
+  });
   isPushingFixes = signal(false);
 
   appendLog(type: LogEntry['type'], msg: string) {
