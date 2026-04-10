@@ -12,8 +12,8 @@ from typing import List, Optional
 
 class ArchObservation(BaseModel):
     """A single architectural observation."""
-    type: str = Field(description="Type: circular_dependency, god_object, tight_coupling, layer_violation, good_pattern")
-    description: str = Field(description="Detailed explanation of the observation")
+    type: Optional[str] = Field(default="info", description="Type: circular_dependency, god_object, tight_coupling, layer_violation, good_pattern")
+    description: Optional[str] = Field(default="", description="Detailed explanation of the observation")
     severity: str = Field(default="info", description="info, warning, or critical")
     files_involved: List[str] = Field(default_factory=list, description="Files involved in this observation")
 

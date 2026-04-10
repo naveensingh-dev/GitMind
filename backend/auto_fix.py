@@ -12,11 +12,11 @@ from typing import List, Optional
 
 class AutoFixItem(BaseModel):
     """A single auto-generated code fix."""
-    file_path: str = Field(description="Path to the file being fixed")
+    file_path: Optional[str] = Field(default="", description="Path to the file being fixed")
     original_code: str = Field(description="The original code snippet that has the issue")
     fixed_code: str = Field(description="The corrected code snippet")
-    description: str = Field(description="Brief explanation of what the fix does")
-    related_issue: str = Field(description="The review finding this fix addresses")
+    description: Optional[str] = Field(default="", description="Brief explanation of what the fix does")
+    related_issue: Optional[str] = Field(default="", description="The review finding this fix addresses")
     severity: str = Field(default="low", description="Severity of the original issue: low, medium, high")
     is_safe: bool = Field(default=True, description="True if this fix is safe to auto-apply (false for high-severity security issues)")
 
