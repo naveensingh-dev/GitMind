@@ -225,7 +225,24 @@
 
       <!-- Main Content Area -->
       <div class="results-content" *ngIf="diffInput() || analysisData()">
-        <div class="tabs-bar">
+        
+        <!-- Agent Thinking Block -->
+        <div class="agent-thinking-block" *ngIf="isAnalyzing()">
+          <div class="thinking-header">
+            <svg class="gemini-sparkle spin" viewBox="0 0 24 24" fill="none" width="20" height="20">
+               <path d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z" fill="currentColor"/>
+            </svg>
+            <span class="thinking-title">GitMind is thinking...</span>
+          </div>
+          <div class="thinking-logs">
+            <div class="thinking-log-row auto-scroll-fade" *ngFor="let log of logs()">
+              <span class="t-log-time">{{ log.time }}</span>
+              <span class="t-log-msg" [class.error]="log.type === 'error'" [class.success]="log.type === 'success' || (log.msg && log.msg.includes('✓'))">{{ log.msg }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs-bar" *ngIf="!isAnalyzing() || analysisData()">
           <div class="tab" [class.active]="currentTab() === 'diff'" (click)="switchTab('diff')">🔍 Diff</div>
           <div class="tab" [class.active]="currentTab() === 'summary'" (click)="switchTab('summary')" *ngIf="analysisData()">📋 Summary</div>
           <div class="tab" [class.active]="currentTab() === 'security'" (click)="switchTab('security')" *ngIf="analysisData()">🔐 Security</div>
