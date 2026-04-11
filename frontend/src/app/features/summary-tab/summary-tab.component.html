@@ -1,45 +1,110 @@
-<div class="approval-strip" *ngIf="getApprovalInfo()">
-  <div class="approval-main">
-    <span class="approval-icon">{{ getApprovalInfo()?.icon }}</span>
-    <div>
-      <div class="approval-title" [ngClass]="getApprovalInfo()?.cls">{{ getApprovalInfo()?.label }}</div>
-      <div class="approval-sub">{{ getApprovalInfo()?.sub }}</div>
+<div class="summary-dashboard">
+  <!-- Enhanced Summary Header Box -->
+  <div class="hero-summary-header">
+    <div class="approval-hero" [ngClass]="getApprovalInfo()?.cls">
+      <div class="approval-hero-icon">{{ getApprovalInfo()?.icon }}</div>
+      <div class="approval-hero-main">
+        <div class="approval-hero-title">{{ getApprovalInfo()?.label }}</div>
+        <div class="approval-hero-sub">{{ getApprovalInfo()?.sub }}</div>
+      </div>
+      
+      <div class="score-dial" *ngIf="analysisData?.confidence_score">
+         <div class="dial-val">{{ analysisData?.confidence_score }}<span class="pct">%</span></div>
+         <div class="dial-lbl">AI Confidence</div>
+      </div>
     </div>
   </div>
-  <div class="approval-score" *ngIf="analysisData?.confidence_score">
-    <div class="score-num">{{ analysisData?.confidence_score }}%</div>
-    <div class="score-label">Confidence</div>
-  </div>
-</div>
 
-<div class="summary-box">
-  <div class="group-title" style="margin-bottom: 16px;">Executive Summary</div>
-  <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ analysisData?.summary }}</p>
-  
-  <div class="conf-bar-wrap" *ngIf="analysisData?.confidence_score">
-    <div class="conf-bar-label">
-      <span>AI Confidence Level</span>
-      <span>{{ analysisData?.confidence_score }}%</span>
+  <div class="summary-grid">
+    <!-- Left Side: Exec Summary and Breakdown -->
+    <div class="summary-main">
+      <div class="summary-card glass-panel">
+        <div class="card-title">
+           <span class="title-icon">📄</span> Executive Summary
+        </div>
+        <div class="exec-text">
+          {{ analysisData?.summary }}
+        </div>
+      </div>
+      
+      <!-- Issue Breakdown -->
+      <div class="summary-card glass-panel metrics-panel">
+        <div class="card-title">
+           <span class="title-icon">📊</span> Analysis Breakdown
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-box security">
+            <div class="metric-header">
+              <div class="metric-icon">🛡️</div>
+              <div class="metric-lbl">Security</div>
+            </div>
+            <div class="metric-val">{{ analysisData?.security?.length || 0 }}</div>
+          </div>
+          <div class="metric-box performance">
+            <div class="metric-header">
+              <div class="metric-icon">⚡</div>
+              <div class="metric-lbl">Performance</div>
+            </div>
+            <div class="metric-val">{{ analysisData?.performance?.length || 0 }}</div>
+          </div>
+          <div class="metric-box style">
+            <div class="metric-header">
+              <div class="metric-icon">✨</div>
+              <div class="metric-lbl">Style & Quality</div>
+            </div>
+            <div class="metric-val">{{ analysisData?.style?.length || 0 }}</div>
+          </div>
+        </div>
+        
+        <!-- Quick severity counters -->
+        <div class="severity-container" *ngIf="getTotalIssues() > 0">
+          <div class="severity-bar">
+             <div class="sev-chunk high" [style.width.%]="getSevPerc('high')"></div>
+             <div class="sev-chunk medium" [style.width.%]="getSevPerc('medium')"></div>
+             <div class="sev-chunk low" [style.width.%]="getSevPerc('low')"></div>
+          </div>
+          <div class="severity-legend">
+             <div class="leg-item"><span class="dot d-high"></span> {{ getSevCount('high') }} High Impact</div>
+             <div class="leg-item"><span class="dot d-med"></span> {{ getSevCount('medium') }} Medium Impact</div>
+             <div class="leg-item"><span class="dot d-low"></span> {{ getSevCount('low') }} Low Impact</div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="conf-bar-track">
-      <div class="conf-bar-fill" [style.width.%]="analysisData?.confidence_score"></div>
-    </div>
-  </div>
-</div>
 
-<!-- Critic Corner -->
-<div class="summary-box critique-box" *ngIf="critiqueData" style="margin-top: 20px; border-color: rgba(167, 139, 250, 0.2);">
-  <div class="group-title" style="margin-bottom: 16px; color: var(--purple);">🧠 Critic's Corner</div>
-  <div style="display: flex; align-items: flex-start; gap: 20px;">
-    <div class="critique-score-circle">
-      <span class="score-val">{{ critiqueData?.score }}</span>
-      <span class="score-lbl">Quality</span>
-    </div>
-    <div style="flex: 1;">
-      <div style="font-size: 12px; color: var(--text3); font-family: var(--mono); margin-bottom: 8px;">SELF-CORRECTION FEEDBACK:</div>
-      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: var(--text2); font-style: italic;">
-        "{{ critiqueData?.feedback || 'The review was deemed accurate and requires no further refinement.' }}"
-      </p>
+    <!-- Right Side: Critic & Quality -->
+    <div class="summary-sidebar" *ngIf="critiqueData">
+      <div class="summary-card glass-panel critic-panel">
+        <div class="card-title critic-title">
+          <span class="title-icon">🧠</span> Neural Critic's Corner
+        </div>
+        
+        <div class="critic-score-ring">
+           <div class="ring-val" 
+                [class.excellent]="critiqueData?.score >= 90" 
+                [class.good]="critiqueData?.score >= 70 && critiqueData?.score < 90" 
+                [class.fair]="critiqueData?.score < 70">
+             {{ critiqueData?.score }}
+           </div>
+           <div class="ring-lbl">Review Quality</div>
+        </div>
+        
+        <div class="critic-feedback-box">
+          <div class="feedback-lbl">SELF-CORRECTION LOG</div>
+          <div class="feedback-txt">
+            "{{ critiqueData?.feedback || 'The review was deemed highly accurate and requires no further refinement in the current iteration loop.' }}"
+          </div>
+        </div>
+
+        <div class="critic-badges">
+           <span class="c-badge" [class.pass]="critiqueData?.accurate" [class.fail]="!critiqueData?.accurate">
+              <span class="b-icon">{{ critiqueData?.accurate ? '✓' : '✗' }}</span> Factually Accurate
+           </span>
+           <span class="c-badge" [class.pass]="critiqueData?.constructive" [class.fail]="!critiqueData?.constructive">
+              <span class="b-icon">{{ critiqueData?.constructive ? '✓' : '✗' }}</span> Constructive Tone
+           </span>
+        </div>
+      </div>
     </div>
   </div>
 </div>

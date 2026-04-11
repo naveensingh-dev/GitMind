@@ -91,54 +91,56 @@ interface FlatNode extends Omit<TreeNode, 'children'> {
     </div>
   `,
   styles: [`
-    .file-tree { font-family: var(--sans); font-size: 12.5px; color: var(--text2); user-select: none; }
+    .file-tree { font-family: var(--sans); font-size: 13px; font-weight: 500; color: #ffffff; user-select: none; }
 
     /* ── Header ── */
     .tree-header {
-      display: flex; flex-wrap: wrap; gap: 6px;
-      padding: 10px 12px 9px; border-bottom: 1px solid var(--border);
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 12px 14px 11px; border-bottom: 1px solid var(--border);
     }
     .stat-pill {
-      display: flex; align-items: center; gap: 4px;
-      font-family: var(--mono); font-size: 10px; font-weight: 600;
-      padding: 2px 8px; border-radius: 20px; letter-spacing: 0.02em;
+      display: flex; align-items: center; gap: 6px;
+      font-family: var(--mono); font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 20px; letter-spacing: 0.04em;
     }
-    .pill-dot { width: 5px; height: 5px; border-radius: 50%; }
-    .stat-pill.added    { color: #00ffa3; background: rgba(0,255,163,0.08); border: 1px solid rgba(0,255,163,0.2); }
-    .stat-pill.added    .pill-dot { background: #00ffa3; box-shadow: 0 0 5px #00ffa3; }
-    .stat-pill.modified { color: #fbbf24; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); }
-    .stat-pill.modified .pill-dot { background: #fbbf24; box-shadow: 0 0 5px #fbbf24; }
-    .stat-pill.deleted  { color: #f87171; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); }
-    .stat-pill.deleted  .pill-dot { background: #f87171; box-shadow: 0 0 5px #f87171; }
+    .pill-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .stat-pill.added    { color: #00ffa3; background: rgba(0,255,163,0.1); border: 1px solid rgba(0,255,163,0.3); }
+    .stat-pill.added    .pill-dot { background: #00ffa3; box-shadow: 0 0 8px #00ffa3; }
+    .stat-pill.modified { color: #fbbf24; background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3); }
+    .stat-pill.modified .pill-dot { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
+    .stat-pill.deleted  { color: #f87171; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); }
+    .stat-pill.deleted  .pill-dot { background: #f87171; box-shadow: 0 0 8px #f87171; }
 
     /* ── Row ── */
     .tree-row {
-      display: flex; align-items: center; gap: 5px;
-      padding-top: 4px; padding-bottom: 4px; padding-right: 8px;
-      cursor: pointer; position: relative; border-radius: 5px;
-      transition: background 0.12s;
+      display: flex; align-items: center; gap: 8px;
+      padding-top: 6px; padding-bottom: 6px; padding-right: 10px;
+      cursor: pointer; position: relative; border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
       min-width: 0;
+      color: rgba(255, 255, 255, 0.85); /* Default crisp white for folders */
     }
-    .tree-row:hover { background: rgba(255,255,255,0.04); color: #fff; }
+    .tree-row:hover { background: rgba(255,255,255,0.08); color: #ffffff; }
     .tree-row.is-active {
-      background: rgba(0,255,163,0.07);
-      color: var(--g);
+      background: rgba(0,255,163,0.12);
+      color: #00ffa3;
     }
     .tree-row.is-active::before {
       content: ''; position: absolute;
-      left: 0; top: 3px; bottom: 3px; width: 2px;
-      background: var(--g); border-radius: 0 2px 2px 0;
+      left: 0; top: 3px; bottom: 3px; width: 3px;
+      background: #00ffa3; border-radius: 0 3px 3px 0;
+      box-shadow: 0 0 8px #00ffa3;
     }
 
     /* File status tinting */
-    .tree-row.is-file.st-added   { color: rgba(0,255,163,0.9); }
-    .tree-row.is-file.st-deleted { color: rgba(248,113,113,0.85); text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.35); }
-    .tree-row.is-file.st-modified { color: var(--text2); }
+    .tree-row.is-file.st-added   { color: #00ffa3; font-weight: 600; text-shadow: 0 0 8px rgba(0,255,163,0.2); }
+    .tree-row.is-file.st-deleted { color: #f87171; text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.6); }
+    .tree-row.is-file.st-modified { color: #ffffff; font-weight: 500; }
 
     /* Indent guides */
     .indent-line {
       position: absolute; top: 0; bottom: 0;
-      width: 1px; background: rgba(255,255,255,0.04);
+      width: 1px; background: rgba(255,255,255,0.1);
       pointer-events: none;
     }
 
@@ -146,21 +148,21 @@ interface FlatNode extends Omit<TreeNode, 'children'> {
     .chevron {
       width: 10px; height: 10px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
-      transition: transform 0.15s; opacity: 0.4; color: var(--text3);
+      transition: transform 0.15s; opacity: 0.8; color: #ffffff;
     }
     .chevron svg { width: 100%; height: 100%; }
-    .chevron.open { transform: rotate(90deg); opacity: 0.7; }
+    .chevron.open { transform: rotate(90deg); opacity: 1; }
     .chevron-placeholder { width: 10px; flex-shrink: 0; }
 
     /* Icons */
     .node-icon { width: 14px; height: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
     .node-icon svg { width: 100%; height: 100%; }
-    .icon-file   { color: rgba(255,255,255,0.25); }
-    .icon-file.icon-added   { color: rgba(0,255,163,0.7); }
-    .icon-file.icon-deleted { color: rgba(248,113,113,0.7); }
-    .icon-folder { color: rgba(56,212,245,0.5); }
-    .tree-row.is-active .icon-file  { color: var(--g); }
-    .tree-row.is-active .icon-folder { color: var(--g); }
+    .icon-file   { color: rgba(255,255,255,0.7); }
+    .icon-file.icon-added   { color: #00ffa3; }
+    .icon-file.icon-deleted { color: #f87171; }
+    .icon-folder { color: rgba(56,212,245,0.9); }
+    .tree-row.is-active .icon-file  { color: #00ffa3; filter: drop-shadow(0 0 4px #00ffa3); }
+    .tree-row.is-active .icon-folder { color: #00ffa3; filter: drop-shadow(0 0 4px #00ffa3); }
 
     /* Status badge */
     .badge {

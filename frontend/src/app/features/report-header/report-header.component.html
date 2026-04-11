@@ -1,7 +1,17 @@
-<div class="panel-header">
+<div class="panel-header" style="position: relative;">
   <div class="panel-title">
     Code & Review Report
   </div>
+  
+  <!-- Centered Analyze PR Button (Only visible on Diff Tab) -->
+  <div *ngIf="currentTab === 'diff' && diffInput" 
+       style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; z-index: 10;">
+    <button class="header-analyze-btn" [disabled]="isAnalyzing" (click)="startAnalysisAction.emit()">
+      <span class="btn-content">{{ isAnalyzing ? '⏳ Running Analysis...' : '⚡ Analyze PR' }}</span>
+      <div class="btn-glow"></div>
+    </button>
+  </div>
+
   <div style="display: flex; align-items: center; gap: 12px;">
     <span *ngIf="analysisData" class="header-badge" style="background: rgba(56, 212, 245, 0.08); border-color: rgba(56, 212, 245, 0.2); color: var(--cyan);">
       Reviewed by: {{ selectedModel }}

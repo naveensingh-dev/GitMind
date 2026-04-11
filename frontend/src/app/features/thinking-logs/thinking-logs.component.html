@@ -1,14 +1,88 @@
-<div class="agent-thinking-block" *ngIf="isAnalyzing">
-  <div class="thinking-header">
-    <svg class="gemini-sparkle spin" viewBox="0 0 24 24" fill="none" width="20" height="20">
-       <path d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z" fill="currentColor"/>
-    </svg>
-    <span class="thinking-title">GitMind is thinking...</span>
+<!-- Floating Restore Pill -->
+<div class="gemini-restore-pill" *ngIf="isAnalyzing && isHidden" (click)="isHidden = false; isMinimized = false;">
+  <div class="orb-miniature"></div>
+  <span>Neural Engine Processing... (Click to Restore)</span>
+</div>
+
+<div class="gemini-thinking-container" *ngIf="isAnalyzing && !isHidden" [class.is-minimized]="isMinimized">
+  
+  <!-- Glowing Sparkle Header -->
+  <div class="gemini-thinking-header">
+    <div class="header-left">
+      <div class="gemini-orb-container">
+        <div class="gemini-orb-outer"></div>
+        <div class="gemini-orb-core">
+          <svg viewBox="0 0 24 24" fill="none" width="22" height="22">
+            <path d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z" fill="url(#gemini-grad)"/>
+            <defs>
+              <linearGradient id="gemini-grad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#38d4f5"/>
+                <stop offset="1" stop-color="#a78bfa"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+      </div>
+      <div class="gemini-thinking-text">
+        <div class="gemini-thinking-title">GitMind Neural Engine</div>
+        <div class="gemini-thinking-subtitle">Synthesizing context and analyzing pull request patterns</div>
+      </div>
+    </div>
+    
+    <div class="gemini-window-controls">
+      <button class="win-btn" (click)="toggleMinimize()" title="Minimize">_</button>
+      <button class="win-btn win-close" (click)="closePanel()" title="Hide Dashboard">✕</button>
+    </div>
   </div>
-  <div class="thinking-logs">
-    <div class="thinking-log-row auto-scroll-fade" *ngFor="let log of logs">
-      <span class="t-log-time">{{ log.time }}</span>
-      <span class="t-log-msg" [class.error]="log.type === 'error'" [class.success]="log.type === 'success' || (log.msg && log.msg.includes('✓'))">{{ log.msg }}</span>
+
+  <div class="gemini-collapsible-body" *ngIf="!isMinimized">
+    
+    <!-- State Machine: Cyber-Card Flow Design -->
+    <div class="cyber-step-grid">
+      <div *ngFor="let step of pipelineSteps; let last = last; let i = index" 
+           class="cyber-card" 
+           [ngClass]="nodeStates[step.id] || 'pending'"
+           [class.is-current]="nodeStates[step.id] === 'active' || nodeStates[step.id] === 'loop'"
+           [class.is-past]="nodeStates[step.id] === 'done'"
+           [style.animation-delay]="i * 0.05 + 's'">
+
+        <div class="card-glass-bg"></div>
+        <div class="card-glow-borders"></div>
+        
+        <div class="cyber-card-content">
+          <div class="cyber-icon-ring">
+            <div class="orbit-1"></div>
+            <div class="orbit-2"></div>
+            <span class="cyber-step-emoji">{{ step.icon }}</span>
+          </div>
+          
+          <div class="cyber-text-block">
+            <span class="cyber-title">{{ step.label }}</span>
+            <span class="cyber-sys">sys.{{ step.id }}</span>
+          </div>
+
+          <div class="cyber-status-tag active" *ngIf="nodeStates[step.id] === 'active' || nodeStates[step.id] === 'loop'">
+            <span class="pulse-dot"></span> ANALYZING
+          </div>
+          <div class="cyber-status-tag done" *ngIf="nodeStates[step.id] === 'done'">✓ DONE</div>
+          <div class="cyber-status-tag wait" *ngIf="!nodeStates[step.id] || nodeStates[step.id] === 'pending'">WAIT</div>
+        </div>
+
+        <div class="cyber-connector-arrow" *ngIf="!last">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M8 5l8 7-8 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Terminal Logs (Latest at the top, scrollable within container) -->
+    <div class="gemini-logs-console">
+      <div class="thinking-logs-container">
+        <div class="log-cursor">_</div>
+        <div class="thinking-log-row auto-scroll-fade" *ngFor="let log of logs.slice().reverse()">
+          <span class="t-log-time">{{ log.time }}</span>
+          <span class="t-log-msg" [class.error]="log.type === 'error'" [class.success]="log.type === 'success' || (log.msg && log.msg.includes('✓'))">{{ log.msg }}</span>
+        </div>
+      </div>
     </div>
   </div>
 </div>

@@ -68,6 +68,12 @@ def _get_connection() -> sqlite3.Connection:
         conn.execute("ALTER TABLE analysis_history ADD COLUMN github_token TEXT")
     except sqlite3.OperationalError:
         pass
+
+    # Migration: add error_message column for failed analyses
+    try:
+        conn.execute("ALTER TABLE analysis_history ADD COLUMN error_message TEXT")
+    except sqlite3.OperationalError:
+        pass
         
     conn.execute("""
         CREATE TABLE IF NOT EXISTS repo_queue (
@@ -117,53 +123,57 @@ def save_analysis(
     github_url: str,
     model: str,
     provider: str,
-    review_report: Dict[str, Any],
+    review_report: Optional[Dict[str, Any]] = None,
     diff_hash: Optional[str] = None,
     diff_text: Optional[str] = None,
     api_key: Optional[str] = None,
-    github_token: Optional[str] = None
+    github_token: Optional[str] = None,
+    error_message: Optional[str] = None,
 ) -> int:
     """
-    Saves a completed analysis to the history database.
+    Saves a completed or failed analysis to the history database.
+    Pass error_message for failed runs; review_report for successful ones.
     Returns the inserted row ID.
     """
-    # Extract repo name from URL
     import re
     repo_match = re.search(r"github\.com/([^/]+/[^/]+)", github_url)
     repo = repo_match.group(1) if repo_match else "unknown"
-    
-    # Count findings
+
+    # For failed runs there may be no review_report
+    review_report = review_report or {}
     security = review_report.get("security", [])
     performance = review_report.get("performance", [])
     style = review_report.get("style", [])
-    
     all_items = security + performance + style
     high_count = sum(1 for item in all_items if item.get("severity") == "high")
-    
+
+    approval_status = "failed" if error_message else review_report.get("approval_status", "unknown")
+
     conn = _get_connection()
     try:
         cursor = conn.execute("""
             INSERT INTO analysis_history 
             (github_url, repo, model, provider, approval_status, confidence_score,
              security_count, performance_count, style_count, high_severity_count,
-             review_json, diff_hash, diff_text, api_key, github_token, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             review_json, diff_hash, diff_text, api_key, github_token, error_message, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             github_url,
             repo,
             model,
             provider,
-            review_report.get("approval_status", "unknown"),
+            approval_status,
             review_report.get("confidence_score", 0),
             len(security),
             len(performance),
             len(style),
             high_count,
-            json.dumps(review_report),
+            json.dumps(review_report) if review_report else None,
             diff_hash,
             diff_text,
             api_key,
             github_token,
+            error_message,
             datetime.now(timezone.utc).isoformat(),
         ))
         conn.commit()
@@ -183,7 +193,7 @@ def get_history(repo: Optional[str] = None, limit: int = 20) -> List[Dict[str, A
             rows = conn.execute(
                 "SELECT id, github_url, repo, model, provider, approval_status, "
                 "confidence_score, security_count, performance_count, style_count, "
-                "high_severity_count, api_key, github_token, created_at "
+                "high_severity_count, api_key, github_token, error_message, created_at "
                 "FROM analysis_history WHERE repo LIKE ? ORDER BY created_at DESC LIMIT ?",
                 (f"%{repo}%", limit)
             ).fetchall()
@@ -191,7 +201,7 @@ def get_history(repo: Optional[str] = None, limit: int = 20) -> List[Dict[str, A
             rows = conn.execute(
                 "SELECT id, github_url, repo, model, provider, approval_status, "
                 "confidence_score, security_count, performance_count, style_count, "
-                "high_severity_count, api_key, github_token, created_at "
+                "high_severity_count, api_key, github_token, error_message, created_at "
                 "FROM analysis_history ORDER BY created_at DESC LIMIT ?",
                 (limit,)
             ).fetchall()
