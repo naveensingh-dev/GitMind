@@ -45,10 +45,11 @@ export class ApiService {
     return this.http.get<any>(`${this.baseUrl}/history/${id}`);
   }
 
-  applyFix(githubUrl: string, filePath: string, fixedCode: string, token: string, commitMessage?: string): Observable<any> {
+  applyFix(githubUrl: string, filePath: string, originalCode: string, fixedCode: string, token: string, commitMessage?: string): Observable<any> {
     const payload: any = {
       github_url: githubUrl,
       file_path: filePath,
+      original_code: originalCode,
       fixed_code: fixedCode,
       github_token: token
     };
@@ -63,7 +64,7 @@ export class ApiService {
     });
   }
 
-  batchApplyFixes(githubUrl: string, token: string, fixes: { file_path: string; fixed_code: string; issue: string }[]): Observable<any> {
+  batchApplyFixes(githubUrl: string, token: string, fixes: { file_path: string; original_code: string; fixed_code: string; issue: string }[]): Observable<any> {
     return this.http.post(`${this.baseUrl}/batch-apply-fixes`, {
       github_url: githubUrl,
       github_token: token,

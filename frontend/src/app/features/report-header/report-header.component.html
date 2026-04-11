@@ -6,7 +6,7 @@
     <span *ngIf="analysisData" class="header-badge" style="background: rgba(56, 212, 245, 0.08); border-color: rgba(56, 212, 245, 0.2); color: var(--cyan);">
       Reviewed by: {{ selectedModel }}
     </span>
-    <div *ngIf="diffInput" class="stats-badge">
+    <div *ngIf="diffInput && totalStats.files > 0" class="stats-badge">
       <span class="stat-files">{{ totalStats.files }} files changed</span>
       <span class="stat-adds">+{{ totalStats.additions }}</span>
       <span class="stat-dels">-{{ totalStats.deletions }}</span>

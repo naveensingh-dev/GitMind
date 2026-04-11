@@ -7,6 +7,22 @@ and assembles a token-efficient context string for the LLM.
 import re
 from typing import List, Optional
 from dataclasses import dataclass, field
+import warnings
+
+# Attempt to load LLMLingua for Prompt Compression
+try:
+    from llmlingua import PromptCompressor
+    # Initialize the tiny compressor model natively (loads ~500MB model into RAM)
+    compressor = PromptCompressor(
+        model_name="microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank",
+        use_llmlingua2=True,
+        device_map="cpu"  # Force CPU to avoid CUDA requirements locally
+    )
+    LLMLINGUA_AVAILABLE = True
+except ImportError:
+    compressor = None
+    LLMLINGUA_AVAILABLE = False
+    warnings.warn("LLMLingua not installed. Run 'pip install llmlingua torch transformers' for ~50% token cost reduction.")
 
 
 @dataclass
@@ -169,4 +185,24 @@ def build_review_context(raw_diff: str, max_chars: int = 120000) -> str:
             f"{', '.join(skipped_files)}\n"
         )
     
-    return "\n".join(parts)
+    final_context = "\n".join(parts)
+    
+    # 🌟 PROMPT COMPRESSION PHASE 🌟
+    if LLMLINGUA_AVAILABLE and compressor:
+        print(f"DEBUG: Compressing diff of {len(final_context)} characters with LLMLingua...")
+        try:
+            compressed = compressor.compress_prompt(
+                final_context,
+                rate=0.6, # Keep 60% of tokens (strip 40% noise)
+                force_tokens=["+", "-", "diff", "a/", "b/", "FILE:", "Language:"], # Don't strip core git demarcations
+                chunk_end_tokens=[".", "\n"]
+            )
+            compressed_context = compressed.get("compressed_prompt", final_context)
+            saved_ratio = compressed.get("saving", "")
+            print(f"DEBUG: Compression finished. Savings: {saved_ratio}")
+            return compressed_context
+        except Exception as e:
+            print(f"DEBUG: LLMLingua compression failed, using raw diff. Error: {e}")
+            return final_context
+            
+    return final_context

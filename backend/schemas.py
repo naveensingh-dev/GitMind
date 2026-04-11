@@ -61,5 +61,6 @@ class AgentState(BaseModel):
     human_feedback: Optional[str] = None
     monologue: List[str] = Field(default_factory=list)
     refinement_count: int = 0
+    tokens_saved: int = 0
     final_markdown: str = ""
     status: str = "idle"

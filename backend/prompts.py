@@ -31,6 +31,7 @@ Rules:
 - Every issue MUST reference a specific `file_path`, `line_number`, and `line` from the diff.
 - If a file has no security issues, do NOT force findings — leave the category empty.
 - Performance and style issues are NOT your concern. Ignore them completely.
+- Generate a MAXIMUM of 3 suggestions overall. Be as succinct as possible.
 
 Return findings in the requested structured JSON format."""
 
@@ -48,6 +49,7 @@ Rules:
 - ONLY report absolute issues you are genuinely confident about.
 - Every issue MUST reference a specific `file_path`, `line_number`, and `line` from the diff.
 - Security and style issues are NOT your concern. Ignore them completely.
+- Generate a MAXIMUM of 3 suggestions overall. Be as succinct as possible.
 
 Return findings in the requested structured JSON format."""
 
@@ -65,6 +67,7 @@ Rules:
 - ONLY report issues you are genuinely confident about. 
 - Every issue MUST reference a specific `file_path`, `line_number`, and `line` from the diff.
 - Security and performance issues are NOT your concern. Ignore them completely.
+- Generate a MAXIMUM of 3 suggestions overall. Be as succinct as possible.
 
 Return findings in the requested structured JSON format."""
 

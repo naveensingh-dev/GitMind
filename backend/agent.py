@@ -35,6 +35,7 @@ from auto_fix import AutoFixReport, AUTO_FIX_PROMPT
 from test_gen import GeneratedTestSuite, TEST_GEN_PROMPT
 from arch_review import ArchReview, ARCH_REVIEW_PROMPT
 from history import get_suppressed_issues
+from toon import to_toon
 import re
 
 # Load environment variables from .env
@@ -65,33 +66,46 @@ async def fetch_github_diff_text(url: str) -> str:
 
 # --- LLM FACTORY METHODS ---
 
-def get_model_instance(provider: str, model_name: str, api_key: str):
+def get_model_instance(provider: str, model_name: str, api_key: str, max_tokens: int = None):
     """
     Creates a specific LLM instance based on the provider and model name.
     Supports Gemini Research Tier, OpenAI, Anthropic, DeepSeek, and Groq.
     """
     if provider == "gemini":
-        return ChatGoogleGenerativeAI(
-            model=model_name, 
-            temperature=0,
-            google_api_key=api_key,
-            safety_settings={
+        kwargs = {
+            "model": model_name, 
+            "temperature": 0,
+            "google_api_key": api_key,
+            "safety_settings": {
                 "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
                 "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
                 "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
                 "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
             }
-        )
+        }
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+        return ChatGoogleGenerativeAI(**kwargs)
     elif provider == "anthropic":
-        return ChatAnthropic(model=model_name, temperature=0, api_key=api_key)
+        kwargs = {"model": model_name, "temperature": 0, "api_key": api_key}
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+        return ChatAnthropic(**kwargs)
     elif provider == "openai":
-        return ChatOpenAI(model=model_name, temperature=0, api_key=api_key)
+        kwargs = {"model": model_name, "temperature": 0, "api_key": api_key}
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+        return ChatOpenAI(**kwargs)
     elif provider == "deepseek":
-        # DeepSeek is compatible with the OpenAI API format
-        return ChatOpenAI(model=model_name, temperature=0, api_key=api_key, base_url="https://api.deepseek.com/v1")
+        kwargs = {"model": model_name, "temperature": 0, "api_key": api_key, "base_url": "https://api.deepseek.com/v1"}
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+        return ChatOpenAI(**kwargs)
     elif provider == "groq":
-        # Groq is compatible with the OpenAI API format
-        return ChatOpenAI(model=model_name, temperature=0, api_key=api_key, base_url="https://api.groq.com/openai/v1")
+        kwargs = {"model": model_name, "temperature": 0, "api_key": api_key, "base_url": "https://api.groq.com/openai/v1"}
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+        return ChatOpenAI(**kwargs)
     return None
 
 def should_retry(exception):
@@ -104,13 +118,25 @@ def should_retry(exception):
     return True
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3), retry=retry_if_exception(should_retry), reraise=True)
-async def invoke_llm(structured_class, state: AgentState, messages: List):
+async def invoke_llm(structured_class, state: AgentState, messages: List, force_cheap_model: bool = False, max_tokens: int = None):
     """
     Business Logic Wrapper for LLM calls.
     Handles credential retrieval, sanitization, and execution with retry logic.
     """
     provider = state.selected_provider or "gemini"
     model_name = state.selected_model or "gemini-1.5-flash"
+    
+    if force_cheap_model:
+        if provider == "gemini":
+            model_name = "gemini-1.5-flash"
+        elif provider == "openai":
+            model_name = "gpt-4o-mini"
+        elif provider == "anthropic":
+            model_name = "claude-3-haiku-20240307"
+        elif provider == "deepseek":
+            model_name = "deepseek-chat"
+        elif provider == "groq":
+            model_name = "llama3-8b-8192"
     
     # Retrieve API key: Priority 1 (State/User Input), Priority 2 (Env Var)
     user_key = state.api_key
@@ -122,7 +148,7 @@ async def invoke_llm(structured_class, state: AgentState, messages: List):
 
     try:
         print(f"DEBUG: Invoking {provider} / {model_name}...")
-        model = get_model_instance(provider, model_name, api_key)
+        model = get_model_instance(provider, model_name, api_key, max_tokens)
         if not model:
             raise ValueError(f"Unsupported provider: {provider}")
             
@@ -290,8 +316,13 @@ async def arbitrate_node(state: AgentState):
     
     # Build context for the arbitrator LLM
     pass_context = ""
+    tokens_saved = state.tokens_saved
     for i, p in enumerate(passes):
-        pass_context += f"=== PASS {i+1} RESULTS ===\n{p.model_dump_json()}\n\n"
+        old_len = len(p.model_dump_json())
+        new_str = to_toon(p.model_dump())
+        new_len = len(new_str)
+        tokens_saved += max(0, (old_len - new_len) // 4)
+        pass_context += f"=== PASS {i+1} RESULTS ===\n{new_str}\n\n"
         
     messages = [
         SystemMessage(content=ARBITRATOR_PROMPT),
@@ -328,6 +359,7 @@ async def arbitrate_node(state: AgentState):
     return {
         "reviews": response, 
         "status": "arbitrate_complete",
+        "tokens_saved": tokens_saved,
         "monologue": [
             f"🔀 Arbitration complete — merged {len(passes)} passes into {original_total} unique finding(s).{filtered_msg}",
             f"📊 Final confidence score: {response.confidence_score}%"
@@ -344,12 +376,14 @@ async def enhance_node(state: AgentState):
         return {"status": "enhance_skipped"}
         
     diff_content = state.diff
-    review_json = state.reviews.model_dump_json()
+    old_json = state.reviews.model_dump_json()
+    review_toon = to_toon(state.reviews.model_dump())
+    tokens_saved = state.tokens_saved + max(0, (len(old_json) - len(review_toon)) // 4)
     
     # Generate prompts
     fix_messages = [
         SystemMessage(content=AUTO_FIX_PROMPT),
-        HumanMessage(content=f"Diff:\n{diff_content}\n\nReview Findings:\n{review_json}")
+        HumanMessage(content=f"Diff:\n{diff_content}\n\nReview Findings:\n{review_toon}")
     ]
     test_messages = [
         SystemMessage(content=TEST_GEN_PROMPT),
@@ -363,11 +397,11 @@ async def enhance_node(state: AgentState):
     monologue = []
     try:
         monologue.append("🚀 Launching agentic capabilities (Auto-Fix, Tests, Architecture)...")
-        # Run all three concurrently
+        # Run all three concurrently with max_token bounds
         fix_res, test_res, arch_res = await asyncio.gather(
-            invoke_llm(AutoFixReport, state, fix_messages),
-            invoke_llm(GeneratedTestSuite, state, test_messages),
-            invoke_llm(ArchReview, state, arch_messages),
+            invoke_llm(AutoFixReport, state, fix_messages, max_tokens=800),
+            invoke_llm(GeneratedTestSuite, state, test_messages, max_tokens=800),
+            invoke_llm(ArchReview, state, arch_messages, max_tokens=500),
             return_exceptions=True
         )
         
@@ -392,11 +426,12 @@ async def enhance_node(state: AgentState):
             monologue.append(f"⚠️ Architecture review failed: {arch_res}")
             
         updates["status"] = "enhance_complete"
+        updates["tokens_saved"] = tokens_saved
         updates["monologue"] = monologue
         return updates
         
     except Exception as e:
-        return {"status": "enhance_failed", "monologue": [f"✗ Enhancement phase failed: {e}"]}
+        return {"status": "enhance_failed", "tokens_saved": state.tokens_saved, "monologue": [f"✗ Enhancement phase failed: {e}"]}
 
 
 async def critique_node(state: AgentState):
@@ -407,16 +442,18 @@ async def critique_node(state: AgentState):
     if not state.self_critique: 
         return {"status": "critique_skipped", "monologue": ["⏩ Self-critique skipped."]}
     
-    review_json = state.reviews.model_dump_json()
+    old_json = state.reviews.model_dump_json()
+    review_toon = to_toon(state.reviews.model_dump())
+    tokens_saved = state.tokens_saved + max(0, (len(old_json) - len(review_toon)) // 4)
     messages = [
         SystemMessage(content=CRITIQUE_SYSTEM_PROMPT),
-        HumanMessage(content=f"Diff:\n{state.diff}\n\nReview:\n{review_json}")
+        HumanMessage(content=f"Diff:\n{state.diff}\n\nReview:\n{review_toon}")
     ]
     
-    response, used_model = await invoke_llm(CritiqueResult, state, messages)
+    response, used_model = await invoke_llm(CritiqueResult, state, messages, force_cheap_model=True, max_tokens=400)
     msg = f"🧠 Self-Critique score: {response.score}/100."
     
-    return {"critique": response, "status": "critique_complete", "monologue": [msg]}
+    return {"critique": response, "status": "critique_complete", "tokens_saved": tokens_saved, "monologue": [msg]}
 
 async def human_review_node(state: AgentState):
     """
@@ -430,20 +467,27 @@ async def refinement_node(state: AgentState):
     Refinement node: Updates the review based on AI critique and Human feedback.
     """
     print("Node: refinement_node")
-    review_json = state.reviews.model_dump_json()
-    critique_json = state.critique.model_dump_json() if state.critique else "{}"
+    old_rev_json = state.reviews.model_dump_json()
+    review_toon = to_toon(state.reviews.model_dump())
+    
+    old_crit_json = state.critique.model_dump_json() if state.critique else "{}"
+    critique_toon = to_toon(state.critique.model_dump()) if state.critique else ""
+    
+    tokens_saved = state.tokens_saved + max(0, (len(old_rev_json) - len(review_toon)) // 4) + max(0, (len(old_crit_json) - len(critique_toon)) // 4)
+    
     human_feedback = state.human_feedback or "No human feedback provided."
     
     messages = [
         SystemMessage(content=REFINEMENT_SYSTEM_PROMPT),
-        HumanMessage(content=f"Review:\n{review_json}\nAI Critique:\n{critique_json}\nHuman Feedback:\n{human_feedback}\nDiff:\n{state.diff}")
+        HumanMessage(content=f"Review:\n{review_toon}\nAI Critique:\n{critique_toon}\nHuman Feedback:\n{human_feedback}\nDiff:\n{state.diff}")
     ]
     
-    response, used_model = await invoke_llm(ReviewReport, state, messages)
+    response, used_model = await invoke_llm(ReviewReport, state, messages, force_cheap_model=True, max_tokens=1500)
     
     return {
         "reviews": response, 
         "refinement_count": state.refinement_count + 1, 
+        "tokens_saved": tokens_saved,
         "human_feedback": None, # Reset feedback for next cycle
         "status": "refinement_complete", 
         "monologue": ["🔄 Refinement cycle finished. Incorporated feedback for improved accuracy."]
@@ -454,11 +498,14 @@ def should_refine(state: AgentState):
     Conditional logic for the state machine loop.
     Triggers refinement if human feedback exists or if the AI critique score is low.
     """
+    if state.refinement_count >= 3:
+        return "end"
+        
     if state.human_feedback:
         return "refine"
         
     critique = state.critique
-    # Refine if score < 80 and we haven't exceeded 2 refinement cycles
+    # Refine if score < 80 and we haven't exceeded 2 AI refinement cycles
     if critique and critique.score < 80 and state.refinement_count < 2: 
         return "refine"
     return "end"
