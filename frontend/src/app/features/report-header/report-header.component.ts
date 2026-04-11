@@ -1,4 +1,4 @@
-import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -13,4 +13,8 @@ export class ReportHeaderComponent {
   @Input() analysisData: any = null;
   @Input() selectedModel: string = '';
   @Input() totalStats: any = { files: 0, additions: 0, deletions: 0 };
+  @Input() currentTab: string = '';
+  @Input() isAnalyzing: boolean = false;
+  
+  @Output() startAnalysisAction = new EventEmitter<void>();
 }

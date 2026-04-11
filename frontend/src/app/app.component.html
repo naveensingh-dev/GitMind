@@ -63,15 +63,7 @@
 </div>
 
 <!-- APP -->
-<div class="app" [class.no-sidebar]="!diffInput()" [class.left-panel-collapsed]="isLeftPanelCollapsed()">
-  <app-sidebar-layout
-    *ngIf="diffInput()"
-    [diffInput]="diffInput()"
-    [filePaths]="filePaths()"
-    [parsedFiles]="parsedFiles()"
-    [selectedFilePath]="selectedFilePath()"
-    (scrollToFileAction)="scrollToFile($event)">
-  </app-sidebar-layout>
+<div class="app" [class.no-sidebar]="true" [class.left-panel-collapsed]="isLeftPanelCollapsed()">
 
 
 
@@ -81,7 +73,10 @@
       [diffInput]="diffInput()"
       [analysisData]="analysisData()"
       [selectedModel]="selectedModel()"
-      [totalStats]="totalStats()">
+      [totalStats]="totalStats()"
+      [currentTab]="currentTab()"
+      [isAnalyzing]="isAnalyzing()"
+      (startAnalysisAction)="startAnalysis()">
     </app-report-header>
     
     <div class="results-area">
@@ -94,10 +89,10 @@
       <!-- Main Content Area -->
       <div class="results-content" *ngIf="diffInput() || analysisData() || analysisHistory().length">
         
-        <app-thinking-logs [isAnalyzing]="isAnalyzing()" [logs]="logs()"></app-thinking-logs>
+        <app-thinking-logs [isAnalyzing]="isAnalyzing()" [logs]="logs()" [nodeStates]="nodeStates()"></app-thinking-logs>
 
         <!-- Horizontal: icon rail left + content right -->
-        <div class="rail-layout" *ngIf="!isAnalyzing() || analysisData()">
+        <div class="rail-layout">
           <app-tabs-bar
             [currentTab]="currentTab()"
             [diffInput]="diffInput()"
@@ -110,6 +105,15 @@
             [archReview]="archReview()"
             (switchTabAction)="switchTab($event)">
           </app-tabs-bar>
+
+          <app-sidebar-layout
+            *ngIf="diffInput() && (currentTab() === 'diff' || currentTab() === 'report')"
+            [diffInput]="diffInput()"
+            [filePaths]="filePaths()"
+            [parsedFiles]="parsedFiles()"
+            [selectedFilePath]="selectedFilePath()"
+            (scrollToFileAction)="scrollToFile($event)">
+          </app-sidebar-layout>
 
           <div class="tab-panels">
             <!-- Skeleton loader shown during tab transitions -->
@@ -310,11 +314,6 @@
       (loadExample)="loadExample()"
       (startAnalysis)="startAnalysis()">
     </app-agent-controls>
-
-    <!-- PIPELINE visibly glows when active -->
-    <div class="pipeline-section">
-      <app-pipeline-visualizer [nodeStates]="nodeStates()"></app-pipeline-visualizer>
-    </div>
 
     <!-- HUMAN FEEDBACK UI -->
     <app-human-feedback

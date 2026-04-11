@@ -1,13 +1,38 @@
 <div class="history-table-container">
+
+  <!-- ── Header bar ─────────────────────────────────────────────────────────── -->
   <div class="history-header-bar">
-    <span class="history-title">📂 Audit Ledger & History</span>
-    <!-- <span class="history-count" *ngIf="filteredHistory().length">{{ filteredHistory().length }} Runs</span> -->
+    <span class="history-title">📂 Audit Ledger &amp; History</span>
   </div>
 
-  <div class="table-scroll-viewport">
+  <!-- ── Sub-tab bar: Reviewed PR | Failed PR ──────────────────────────────── -->
+  <div class="history-sub-tab-bar">
+    <button
+      class="history-sub-tab"
+      [class.active]="activeTab() === 'reviewed'"
+      (click)="switchTab('reviewed')"
+      id="history-reviewed-tab">
+      <span class="sub-tab-icon">✅</span>
+      Reviewed PR
+      <span class="sub-tab-badge success" *ngIf="reviewedHistory().length > 0">{{ reviewedHistory().length }}</span>
+    </button>
+    <button
+      class="history-sub-tab"
+      [class.active]="activeTab() === 'failed'"
+      (click)="switchTab('failed')"
+      id="history-failed-tab">
+      <span class="sub-tab-icon">⚠️</span>
+      Failed PR
+      <span class="sub-tab-badge fail" *ngIf="failedHistory().length > 0">{{ failedHistory().length }}</span>
+    </button>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!--  REVIEWED PR TABLE                                                       -->
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <div class="table-scroll-viewport" *ngIf="activeTab() === 'reviewed'">
     <table class="history-table">
       <thead>
-        <!-- Main Headers -->
         <tr>
           <th style="width: 5%">Status</th>
           <th style="width: 15%">Date</th>
@@ -16,8 +41,6 @@
           <th style="width: 20%">LLM API Key</th>
           <th style="width: 20%">GitHub Token</th>
         </tr>
-
-        <!-- Filter Row -->
         <tr class="filter-row">
           <th></th>
           <th><input type="text" placeholder="Filter date..." [ngModel]="filterDate()"
@@ -52,14 +75,71 @@
         <tr *ngIf="filteredHistory().length === 0">
           <td colspan="6" class="empty-table">
             <span class="empty-icon">📂</span>
-            <span class="empty-text">No audit logs match these filters.</span>
+            <span class="empty-text">No reviewed PRs match these filters.</span>
           </td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <!-- Paginator Footer -->
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!--  FAILED PR TABLE                                                         -->
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <div class="table-scroll-viewport" *ngIf="activeTab() === 'failed'">
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th style="width: 14%">Date</th>
+          <th style="width: 22%">Repository / PR</th>
+          <th style="width: 12%">Model</th>
+          <th style="width: 12%">LLM API Key</th>
+          <th style="width: 12%">GitHub Token</th>
+          <th style="width: 14%">Error Type</th>
+          <th style="width: 14%">Failure Reason</th>
+        </tr>
+        <tr class="filter-row">
+          <th><input type="text" placeholder="Filter date..." [ngModel]="filterDate()"
+              (ngModelChange)="filterDate.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter repo..." [ngModel]="filterUrl()"
+              (ngModelChange)="filterUrl.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter model..." [ngModel]="filterModel()"
+              (ngModelChange)="filterModel.set($event); onFilterChange()"></th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th><input type="text" placeholder="Filter reason..." [ngModel]="filterFailReason()"
+              (ngModelChange)="filterFailReason.set($event); onFilterChange()"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let h of paginatedHistory()" class="history-row failed-row">
+          <td class="date-cell">{{ h.created_at | date:'short' }}</td>
+          <td class="repo-cell">
+            <div class="repo-name">{{ h.repo }}</div>
+            <div class="repo-url">{{ h.github_url }}</div>
+          </td>
+          <td class="model-cell">{{ h.model }}</td>
+          <td class="key-cell font-mono">{{ maskToken(h.api_key) }}</td>
+          <td class="key-cell font-mono">{{ maskToken(h.github_token) }}</td>
+          <td class="error-type-cell">
+            <span class="error-type-badge">{{ classifyError(h.error_message) }}</span>
+          </td>
+          <td class="fail-reason-cell" [attr.data-tooltip]="h.error_message">
+            {{ truncate(h.error_message) }}
+          </td>
+        </tr>
+
+        <tr *ngIf="filteredHistory().length === 0">
+          <td colspan="7" class="empty-table">
+            <span class="empty-icon">🎉</span>
+            <span class="empty-text">No failed PR analyses — everything is running smoothly!</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Paginator Footer ───────────────────────────────────────────────────── -->
   <div class="paginator-bar" *ngIf="filteredHistory().length > 0">
     <div class="page-size-selector">
       <span class="page-info">Rows per page:</span>
@@ -71,23 +151,20 @@
       </select>
     </div>
 
-    <!-- Center: Total record count -->
     <div class="page-total">
       <span class="page-total-chip">
-        {{ filteredHistory().length }} {{ filteredHistory().length === analysisHistory.length ? 'total records' : 'of ' + analysisHistory.length + ' filtered' }}
+        {{ filteredHistory().length }}
+        {{ filteredHistory().length === (activeTab() === 'reviewed' ? reviewedHistory().length : failedHistory().length) ? 'total records' : 'filtered' }}
       </span>
     </div>
 
     <div class="page-controls">
       <button class="page-btn" [disabled]="currentPage() === 1" (click)="goToFirstPage()" title="First Page">⏮</button>
       <button class="page-btn" [disabled]="currentPage() === 1" (click)="prevPage()" title="Previous Page">◀</button>
-
       <span class="page-info">Page {{ currentPage() }} of {{ totalPages() }}</span>
-
-      <button class="page-btn" [disabled]="currentPage() === totalPages()" (click)="nextPage()"
-        title="Next Page">▶</button>
-      <button class="page-btn" [disabled]="currentPage() === totalPages()" (click)="goToLastPage()"
-        title="Last Page">⏭</button>
+      <button class="page-btn" [disabled]="currentPage() === totalPages()" (click)="nextPage()" title="Next Page">▶</button>
+      <button class="page-btn" [disabled]="currentPage() === totalPages()" (click)="goToLastPage()" title="Last Page">⏭</button>
     </div>
   </div>
+
 </div>

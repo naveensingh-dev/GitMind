@@ -252,6 +252,22 @@ async def analyze_pr(request: Request):
             error_payload = {"node": "error", "status": "failed", "message": str(e)}
             yield f"data: {json.dumps(error_payload)}\n\n"
 
+            # Persist the failed attempt to history so it shows in the Failed PR tab
+            if github_url:
+                try:
+                    save_analysis(
+                        github_url=github_url,
+                        model=initial_state.selected_model,
+                        provider=initial_state.selected_provider,
+                        diff_hash=diff_hash,
+                        diff_text=initial_state.diff,
+                        api_key=initial_state.api_key,
+                        github_token=github_token,
+                        error_message=str(e)
+                    )
+                except Exception as save_err:
+                    print(f"DEBUG: Failed to save failed analysis: {save_err}")
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 async def batch_worker_task(repo_url: str, provider: str, model: str, scan_id: int):
