@@ -21,6 +21,14 @@ class ReviewReport(BaseModel):
     summary: str = Field(description="2-3 sentence executive summary of the review")
     approval_status: Literal["approved", "needs_changes", "rejected"] = Field(description="Final verdict")
     confidence_score: int = Field(ge=0, le=100, description="Confidence in the review quality")
+    
+    # Enhancements (moved here so they are saved to history)
+    auto_fixes: Optional[AutoFixReport] = None
+    generated_tests: Optional[GeneratedTestSuite] = None
+    arch_review: Optional[ArchReview] = None
+    
+    # Error tracking
+    partial_errors: List[str] = Field(default_factory=list)
 
 class CritiqueResult(BaseModel):
     accurate: bool = Field(description="Is the feedback factually correct based on the diff?")

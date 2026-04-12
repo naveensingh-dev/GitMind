@@ -1,18 +1,146 @@
-<div class="summary-box" style="margin-bottom: 20px; border-color: rgba(255, 105, 180, 0.2);">
-  <div class="group-title" style="color: #ff69b4;">Architecture Review</div>
-  <p style="margin: 0; line-height: 1.8; opacity: 0.9;">{{ archReview?.summary }}</p>
-</div>
-<div class="mermaid-container" *ngIf="archReview?.mermaid_code" style="background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; overflow-x: auto;">
-  <pre class="mermaid" style="margin: 0; color: black;">{{ archReview?.mermaid_code }}</pre>
+<div class="arch-container animate-in" *ngIf="archReview">
+  
+  <!-- Header: Summary HUD -->
+  <div class="arch-header glass-card">
+    <div class="h-icon">🏗️</div>
+    <div class="h-text">
+       <div class="h-title">Structural Blueprint</div>
+       <p class="h-summary">{{ archReview.summary }}</p>
+    </div>
+  </div>
+
+  <div class="arch-main">
+    <!-- LEFT: THE BLUEPRINT -->
+    <div class="wing blueprint-wing">
+       <div class="wing-header">
+         <span class="wing-title">TECHNICAL ARCHITECTURE</span>
+         <button class="expand-btn" (click)="toggleDialog()" title="Expand to Fullscreen">
+           🔍 Fullscreen
+         </button>
+       </div>
+       <div class="blueprint-content glass-card tech-grid" (click)="toggleDialog()" style="cursor: zoom-in;">
+         <div class="mermaid-container" *ngIf="archReview?.mermaid_code">
+           <pre class="mermaid">{{ archReview?.mermaid_code }}</pre>
+         </div>
+       </div>
+    </div>
+
+    <!-- RIGHT: THE OBSERVATIONS -->
+    <div class="wing insights-wing">
+       <div class="wing-header">
+          <span class="wing-title">ARCHITECTURAL OBSERVATIONS</span>
+          <span class="obs-count">{{ archReview?.observations?.length || 0 }} Insights</span>
+       </div>
+       <div class="insights-list">
+          <div *ngFor="let obs of archReview?.observations" class="glass-card obs-card" [class.high]="obs.severity === 'critical'">
+            <div class="obs-card-header">
+              <span class="sev-pill" [ngClass]="'sev-' + (obs.severity === 'critical' ? 'high' : (obs.severity === 'warning' ? 'medium' : 'low'))">
+                {{ obs.type || 'Insight' }}
+              </span>
+              <span class="obs-desc">{{ obs.description }}</span>
+            </div>
+            <div class="obs-files" *ngIf="obs.files_involved?.length">
+               <div class="file-chip" *ngFor="let f of obs.files_involved">{{ f }}</div>
+            </div>
+          </div>
+       </div>
+    </div>
+  </div>
+
+  <!-- FULLSCREEN DIALOG OVERLAY -->
+  <div class="dialog-overlay" *ngIf="isDialogOpen" (click)="toggleDialog()">
+    <div class="dialog-content glass-panel" (click)="$event.stopPropagation()">
+      <div class="dialog-header">
+        <span class="dialog-title">Architecture Inspection HUD</span>
+        <div class="dialog-actions">
+           <span class="dialog-hint">Use mouse to pan & zoom (if enabled)</span>
+           <button class="close-btn" (click)="toggleDialog()">✕</button>
+        </div>
+      </div>
+      <div class="dialog-body tech-grid">
+         <div class="mermaid-modal-container">
+            <pre class="mermaid-modal">{{ archReview?.mermaid_code }}</pre>
+         </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
-<div class="group-title" style="margin: 20px 0 10px;">Architectural Observations</div>
-<div *ngFor="let obs of archReview?.observations" class="review-card open">
-  <div class="review-card-header">
-    <span class="severity-pill" [ngClass]="'sev-' + (obs.severity === 'critical' ? 'high' : obs.severity === 'warning' ? 'medium' : 'low')">{{ obs.type }}</span>
-    <span class="card-issue">{{ obs.description }}</span>
-  </div>
-  <div class="review-card-body" *ngIf="obs.files_involved?.length">
-    <div class="code-block">{{ obs.files_involved.join(', ') }}</div>
-  </div>
-</div>
+<style>
+.arch-container { 
+  margin: -24px; /* Offset parent padding */
+  padding: 32px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 24px; 
+  height: calc(100% + 48px); /* Fill entire parent height */
+  overflow: hidden; 
+  color: var(--text); 
+  background: var(--bg0);
+}
+
+/* Technical Grid Pattern */
+.tech-grid {
+  background-color: #0c1222;
+  background-image: 
+    linear-gradient(rgba(0, 255, 163, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 163, 0.03) 1px, transparent 1px);
+  background-size: 30px 30px;
+  position: relative;
+}
+
+/* Header */
+.arch-header { display: flex; align-items: center; gap: 24px; padding: 20px 24px; border-color: rgba(167, 139, 250, 0.2); background: linear-gradient(135deg, rgba(24, 32, 58, 0.6), transparent); flex-shrink: 0; }
+.h-icon { font-size: 28px; }
+.h-title { font-family: var(--display); font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 2px; }
+.h-summary { color: var(--text2); line-height: 1.5; font-size: 14px; margin: 0; }
+
+/* Main Split */
+.arch-main { display: flex; gap: 24px; flex: 1; min-height: 0; }
+.wing { display: flex; flex-direction: column; gap: 12px; width: 50%; min-height: 0; }
+
+.wing-header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.wing-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 0.2em; text-transform: uppercase; }
+.obs-count { font-size: 10px; color: var(--cyan); background: rgba(56, 212, 245, 0.1); padding: 2px 8px; border-radius: 4px; }
+
+/* Left Wing: Blueprint */
+.blueprint-content { flex: 1; min-height: 0; border: 1px solid var(--border-strong); position: relative; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 20px; }
+.mermaid-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.mermaid-container ::ng-deep svg { max-width: 100% !important; height: auto !important; }
+
+.expand-btn { position: absolute; top: 12px; right: 12px; z-index: 10; background: rgba(0,0,0,0.7); border: 1px solid var(--border); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; backdrop-filter: blur(8px); transition: all 0.2s; }
+.expand-btn:hover { background: var(--g); color: #000; border-color: var(--g); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 255, 163, 0.3); }
+
+/* Right Wing: Insights */
+.insights-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 8px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.obs-card { padding: 16px; border-color: var(--border); border-left-width: 3px; background: rgba(255,255,255,0.02); }
+.obs-card.high { border-left-color: var(--red); background: linear-gradient(90deg, rgba(248, 71, 71, 0.08), transparent); }
+
+.obs-card-header { display: flex; align-items: flex-start; gap: 12px; }
+.sev-pill { font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+.sev-high { background: rgba(248, 71, 71, 0.15); color: var(--red); border: 1px solid rgba(248, 71, 71, 0.3); }
+.sev-medium { background: rgba(245, 158, 11, 0.15); color: var(--orange); border: 1px solid rgba(245, 158, 11, 0.3); }
+.sev-low { background: rgba(56, 212, 245, 0.15); color: var(--cyan); border: 1px solid rgba(56, 212, 245, 0.3); }
+
+.obs-desc { font-size: 14px; line-height: 1.5; color: var(--text); font-weight: 500; }
+.obs-files { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.file-chip { font-family: var(--mono); font-size: 9px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; color: var(--text2); }
+
+/* Dialog Overlay */
+.dialog-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0, 0, 0, 0.95); backdrop-filter: blur(40px); display: flex; align-items: center; justify-content: center; padding: 0; }
+.dialog-content { width: 100%; height: 100%; display: flex; flex-direction: column; padding: 0; border: none; border-radius: 0; overflow: hidden; }
+.dialog-header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); }
+.dialog-title { font-family: var(--display); font-size: 20px; font-weight: 800; color: #fff; text-transform: uppercase; letter-spacing: 0.05em; }
+.dialog-actions { display: flex; align-items: center; gap: 24px; }
+.dialog-hint { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+.close-btn { background: rgba(255,255,255,0.05); border: 1px solid var(--border); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--text2); cursor: pointer; transition: all 0.2s; }
+.close-btn:hover { background: var(--red); color: #fff; border-color: var(--red); transform: rotate(90deg); }
+
+.dialog-body { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 40px; }
+.mermaid-modal-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.mermaid-modal-container ::ng-deep svg { width: 100% !important; height: auto !important; max-width: none !important; }
+
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.animate-in { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+</style>

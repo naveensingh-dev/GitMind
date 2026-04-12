@@ -1,37 +1,146 @@
-          <div class="analytics-header">
-            <h2>GitMind Intelligence Dashboard</h2>
-            <p>Aggregate insights across the repository's analysis history.</p>
-          </div>
-          
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <span class="kpi-value">{{ metrics.totalReviews }}</span>
-              <span class="kpi-label">Reviews Run</span>
-            </div>
-            <div class="kpi-card">
-              <span class="kpi-value text-red">{{ metrics.highSev }}</span>
-              <span class="kpi-label">High-Severity Findings</span>
-            </div>
-            <div class="kpi-card">
-              <span class="kpi-value text-purple">{{ metrics.totalThreats }}</span>
-              <span class="kpi-label">Total Code Smells Blocked</span>
-            </div>
-            <div class="kpi-card">
-              <span class="kpi-value">{{ metrics.avgConf }}%</span>
-              <span class="kpi-label">Avg AI Confidence</span>
-            </div>
-          </div>
+<div class="analytics-container animate-in">
+  <div class="analytics-header">
+    <h2 class="hud-gradient-text">Intelligence Command Center</h2>
+    <p>Real-time aggregate insights from the neural analysis engine.</p>
+  </div>
+  
+  <div class="bento-grid">
+    <!-- Main Confidence Gauge (Large Card) -->
+    <div class="glass-card main-gauge">
+      <div class="gauge-header">
+        <span class="gauge-label">Neural Confidence Index</span>
+        <span class="gauge-value g-text">{{ metrics.avgConf }}%</span>
+      </div>
+      <div class="svg-container">
+        <svg viewBox="0 0 100 100" class="confidence-svg">
+          <circle cx="50" cy="50" r="45" class="bg-circle"></circle>
+          <circle cx="50" cy="50" r="45" class="fg-circle" 
+            [style.stroke-dashoffset]="283 - (283 * metrics.avgConf / 100)"></circle>
+        </svg>
+        <div class="gauge-glow" [style.opacity]="metrics.avgConf / 100"></div>
+      </div>
+      <div class="gauge-footer">
+        Higher scores indicate optimal code clarity and low risk.
+      </div>
+    </div>
 
-          <div class="chart-section">
-            <h3>Findings Distribution</h3>
-            <div class="stacked-bar">
-              <div class="bar-segment sec" [style.width.%]="metrics.secPct" title="Security: {{ metrics.sumSec }}"></div>
-              <div class="bar-segment perf" [style.width.%]="metrics.perfPct" title="Performance: {{ metrics.sumPerf }}"></div>
-              <div class="bar-segment style" [style.width.%]="metrics.stylePct" title="Style: {{ metrics.sumStyle }}"></div>
-            </div>
-            <div class="legend">
-              <span><span class="dot sec"></span>Security ({{ metrics.sumSec }})</span>
-              <span><span class="dot perf"></span>Performance ({{ metrics.sumPerf }})</span>
-              <span><span class="dot style"></span>Style ({{ metrics.sumStyle }})</span>
-            </div>
-          </div>
+    <!-- Stats Stack (Side Cards) -->
+    <div class="glass-card stat-card pulse-blue">
+      <div class="stat-icon">📑</div>
+      <div class="stat-info">
+        <span class="stat-value">{{ metrics.totalReviews }}</span>
+        <span class="stat-label">Total Reviews Run</span>
+      </div>
+    </div>
+
+    <div class="glass-card stat-card pulse-red">
+      <div class="stat-icon">🛡️</div>
+      <div class="stat-info">
+        <span class="stat-value text-red">{{ metrics.highSev }}</span>
+        <span class="stat-label">Critical Vulnerabilities</span>
+      </div>
+    </div>
+
+    <!-- Wide Findings Distribution -->
+    <div class="glass-card wide-card">
+      <div class="wide-header">
+        <h3>Findings Distribution Heatmap</h3>
+        <div class="total-badge">{{ metrics.totalThreats }} Total Issues</div>
+      </div>
+      
+      <div class="heatmap-viz">
+        <div class="viz-segment sec" [style.flex]="metrics.secPct || 1">
+          <span class="viz-label">Security</span>
+          <span class="viz-count">{{ metrics.sumSec }}</span>
+        </div>
+        <div class="viz-segment perf" [style.flex]="metrics.perfPct || 1">
+          <span class="viz-label">Performance</span>
+          <span class="viz-count">{{ metrics.sumPerf }}</span>
+        </div>
+        <div class="viz-segment style" [style.flex]="metrics.stylePct || 1">
+          <span class="viz-label">Style</span>
+          <span class="viz-count">{{ metrics.sumStyle }}</span>
+        </div>
+      </div>
+
+      <div class="viz-legend">
+        <div class="legend-item"><span class="dot sec"></span> Security</div>
+        <div class="legend-item"><span class="dot perf"></span> Performance</div>
+        <div class="legend-item"><span class="dot style"></span> Style</div>
+      </div>
+    </div>
+
+    <!-- Small Quality Card -->
+    <div class="glass-card small-card">
+      <div class="quality-score">
+        <span class="score-letter" [class.excellent]="metrics.avgConf > 85" 
+                                    [class.good]="metrics.avgConf > 70">
+          {{ metrics.avgConf > 85 ? 'A+' : (metrics.avgConf > 70 ? 'B' : 'C') }}
+        </span>
+        <span class="score-label">Health Grade</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.analytics-container {
+  padding: 32px;
+  height: 100%;
+  overflow-y: auto;
+}
+.analytics-header { margin-bottom: 32px; }
+.analytics-header h2 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: auto auto;
+  gap: 20px;
+}
+
+.glass-card { padding: 24px; position: relative; }
+
+.main-gauge { grid-column: span 2; grid-row: span 2; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 255, 163, 0.03); border: 1px solid rgba(0, 255, 163, 0.1); }
+.gauge-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+.gauge-label { font-size: 13px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.1em; }
+.gauge-value { font-size: 48px; font-weight: 800; font-family: var(--display); }
+
+.svg-container { position: relative; width: 180px; height: 180px; }
+.confidence-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.bg-circle { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 8; }
+.fg-circle { fill: none; stroke: var(--g); stroke-width: 8; stroke-linecap: round; stroke-dasharray: 283; transition: stroke-dashoffset 1s ease-out; }
+.gauge-glow { position: absolute; inset: 0; background: radial-gradient(circle, var(--g) 0%, transparent 70%); filter: blur(40px); opacity: 0.2; pointer-events: none; }
+
+.stat-card { display: flex; align-items: center; gap: 20px; }
+.stat-icon { font-size: 32px; }
+.stat-value { font-size: 24px; font-weight: 700; display: block; }
+.stat-label { font-size: 13px; color: var(--text2); }
+
+.wide-card { grid-column: span 2; }
+.wide-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.total-badge { background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 6px; font-size: 12px; font-family: var(--mono); color: var(--cyan); }
+
+.heatmap-viz { height: 60px; display: flex; border-radius: 12px; overflow: hidden; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.05); }
+.viz-segment { display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.3s; position: relative; }
+.viz-segment:hover { opacity: 0.8; transform: scaleY(1.05); }
+.viz-segment.sec { background: var(--red); color: #fff; }
+.viz-segment.perf { background: var(--orange); color: #fff; }
+.viz-segment.style { background: var(--cyan); color: #000; }
+.viz-label { font-size: 9px; text-transform: uppercase; font-weight: 800; opacity: 0.8; }
+.viz-count { font-size: 16px; font-weight: 700; }
+
+.viz-legend { display: flex; gap: 16px; font-size: 12px; color: var(--text2); }
+.legend-item { display: flex; align-items: center; gap: 6px; }
+
+.small-card { grid-column: span 2; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(56, 212, 245, 0.05), transparent); }
+.quality-score { text-align: center; }
+.score-letter { font-size: 64px; font-weight: 900; font-family: var(--display); display: block; line-height: 1; }
+.score-letter.excellent { color: var(--g); text-shadow: 0 0 20px rgba(0, 255, 163, 0.4); }
+.score-letter.good { color: var(--cyan); text-shadow: 0 0 20px rgba(56, 212, 245, 0.4); }
+.score-label { color: var(--text2); font-size: 14px; text-transform: uppercase; letter-spacing: 0.2em; }
+
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.animate-in { animation: slideUp 0.5s ease forwards; }
+
+</style>

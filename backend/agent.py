@@ -8,6 +8,7 @@ with repo-aware configuration and PR context enrichment.
 import os
 import httpx
 import asyncio
+import logging
 from typing import Dict, TypedDict, List, Optional
 from langgraph.graph import StateGraph, END
 from langchain_anthropic import ChatAnthropic
@@ -40,6 +41,8 @@ import re
 
 # Load environment variables from .env
 load_dotenv()
+
+logger = logging.getLogger("gitmind.agent")
 
 # --- UTILS ---
 
@@ -128,7 +131,7 @@ async def invoke_llm(structured_class, state: AgentState, messages: List, force_
     
     if force_cheap_model:
         if provider == "gemini":
-            model_name = "gemini-1.5-flash"
+            model_name = "gemini-2.0-flash-lite"  # gemini-1.5-flash is deprecated/removed
         elif provider == "openai":
             model_name = "gpt-4o-mini"
         elif provider == "anthropic":
@@ -167,7 +170,7 @@ async def input_parse_node(state: AgentState):
     Initial node: Validates input, fetches the PR diff if needed,
     loads .gitmind.yaml config, fetches PR comments, and applies smart diff chunking.
     """
-    print("Node: input_parse_node")
+    logger.info('"Node: input_parse_node"')
     url = state.github_url
     diff = state.diff
     monologue = []
@@ -230,7 +233,7 @@ async def multi_review_node(state: AgentState):
     Multi-Review Persona Node (Phase 4.1): Runs fully independent, customized 
     concurrent review passes based on .gitmind.yaml's "focus" configuration.
     """
-    print("Node: multi_review_node")
+    logger.info('"Node: multi_review_node"')
     if not state.diff: 
         return {"status": "failed", "monologue": ["✗ No diff found to review."]}
     
@@ -303,7 +306,7 @@ async def arbitrate_node(state: AgentState):
     Arbitrator Node: Merges findings from ALL dynamic review passes into a single
     unified ReviewReport. Deduplicates issues and assigns confidence scores.
     """
-    print("Node: arbitrate_node")
+    logger.info('"Node: arbitrate_node"')
     
     passes = state.review_passes or []
     
@@ -343,7 +346,7 @@ async def arbitrate_node(state: AgentState):
     repo_match = re.search(r"github\.com/([^/]+/[^/]+)", state.github_url or "")
     if repo_match:
         repo = repo_match.group(1)
-        suppressed = get_suppressed_issues(repo)
+        suppressed = await get_suppressed_issues(repo)
         
         if suppressed:
             # Filter matches exact issue text
@@ -371,7 +374,7 @@ async def enhance_node(state: AgentState):
     Phase 3: Agentic Capabilities Node.
     Runs Auto-Fix generation, Test generation, and Architecture Review concurrently.
     """
-    print("Node: enhance_node")
+    logger.info('"Node: enhance_node"')
     if not state.diff or not state.reviews:
         return {"status": "enhance_skipped"}
         
@@ -397,37 +400,48 @@ async def enhance_node(state: AgentState):
     monologue = []
     try:
         monologue.append("🚀 Launching agentic capabilities (Auto-Fix, Tests, Architecture)...")
-        # Run all three concurrently with max_token bounds
-        fix_res, test_res, arch_res = await asyncio.gather(
-            invoke_llm(AutoFixReport, state, fix_messages, max_tokens=800),
-            invoke_llm(GeneratedTestSuite, state, test_messages, max_tokens=800),
-            invoke_llm(ArchReview, state, arch_messages, max_tokens=500),
-            return_exceptions=True
-        )
+        # Run sequentially to prevent rate limit quota exhaustion (RESOURCE_EXHAUSTED) on free tiers
+        partial_errors = list(state.reviews.partial_errors)
         
-        updates = {}
+        try:
+            fix_res = await invoke_llm(AutoFixReport, state, fix_messages, max_tokens=800)
+            fix_res = fix_res[0]
+        except Exception as e:
+            logger.warning(f"Auto-fix failed: {e}")
+            partial_errors.append(f"Auto-fix failed: {e}")
+            
+        await asyncio.sleep(1) # Breathable delay for quotas
         
-        if not isinstance(fix_res, Exception):
-            updates["auto_fixes"] = fix_res[0]
-            monologue.append(f"🔧 Generated {len(fix_res[0].fixes)} auto-fix patch(es).")
-        else:
-            monologue.append(f"⚠️ Auto-fix generation failed: {fix_res}")
+        try:
+            test_res = await invoke_llm(GeneratedTestSuite, state, test_messages, max_tokens=800)
+            test_res = test_res[0]
+        except Exception as e:
+            logger.warning(f"Test generation failed: {e}")
+            partial_errors.append(f"Test generation failed: {e}")
             
-        if not isinstance(test_res, Exception):
-            updates["generated_tests"] = test_res[0]
-            monologue.append(f"🧪 Generated {len(test_res[0].tests)} unit test(s).")
-        else:
-            monologue.append(f"⚠️ Test generation failed: {test_res}")
-            
-        if not isinstance(arch_res, Exception):
-            updates["arch_review"] = arch_res[0]
-            monologue.append(f"🏗️ Generated architecture review ({len(arch_res[0].observations)} observations).")
-        else:
-            monologue.append(f"⚠️ Architecture review failed: {arch_res}")
-            
-        updates["status"] = "enhance_complete"
-        updates["tokens_saved"] = tokens_saved
-        updates["monologue"] = monologue
+        await asyncio.sleep(1)
+        
+        try:
+            arch_res = await invoke_llm(ArchReview, state, arch_messages, max_tokens=500)
+            arch_res = arch_res[0]
+        except Exception as e:
+            logger.warning(f"Arch review failed: {e}")
+            partial_errors.append(f"Arch review failed: {e}")
+        
+        # Update the main reviews object so enhancements are part of the final report
+        new_reviews = state.reviews.model_copy(update={
+            "auto_fixes": fix_res,
+            "generated_tests": test_res,
+            "arch_review": arch_res,
+            "partial_errors": partial_errors
+        })
+
+        updates = {
+            "reviews": new_reviews,
+            "status": "enhance_complete",
+            "tokens_saved": tokens_saved,
+            "monologue": monologue
+        }
         return updates
         
     except Exception as e:
@@ -438,7 +452,7 @@ async def critique_node(state: AgentState):
     """
     Critic node: Evaluates the arbitrated review for quality, accuracy, and constructiveness.
     """
-    print("Node: critique_node")
+    logger.info('"Node: critique_node"')
     if not state.self_critique: 
         return {"status": "critique_skipped", "monologue": ["⏩ Self-critique skipped."]}
     
@@ -450,23 +464,29 @@ async def critique_node(state: AgentState):
         HumanMessage(content=f"Diff:\n{state.diff}\n\nReview:\n{review_toon}")
     ]
     
-    response, used_model = await invoke_llm(CritiqueResult, state, messages, force_cheap_model=True, max_tokens=400)
-    msg = f"🧠 Self-Critique score: {response.score}/100."
-    
-    return {"critique": response, "status": "critique_complete", "tokens_saved": tokens_saved, "monologue": [msg]}
+    try:
+        response, used_model = await invoke_llm(CritiqueResult, state, messages, force_cheap_model=True, max_tokens=400)
+        msg = f"🧠 Self-Critique score: {response.score}/100."
+        return {"critique": response, "status": "critique_complete", "tokens_saved": tokens_saved, "monologue": [msg]}
+    except Exception as e:
+        logger.warning(f"Critique failed: {e}")
+        partial_errors = list(state.reviews.partial_errors)
+        partial_errors.append(f"Critique failed: {e}")
+        new_reviews = state.reviews.model_copy(update={"partial_errors": partial_errors})
+        return {"reviews": new_reviews, "status": "critique_failed", "tokens_saved": tokens_saved, "monologue": [f"⚠️ Self-Critique skipped due to error: {e}"]}
 
 async def human_review_node(state: AgentState):
     """
     Human-in-the-loop node: Interrupts execution to wait for human feedback.
     """
-    print("Node: human_review_node")
+    logger.info('"Node: human_review_node"')
     return {"status": "awaiting_feedback", "monologue": ["✋ Agent paused. Waiting for human refinement..."]}
 
 async def refinement_node(state: AgentState):
     """
     Refinement node: Updates the review based on AI critique and Human feedback.
     """
-    print("Node: refinement_node")
+    logger.info('"Node: refinement_node"')
     old_rev_json = state.reviews.model_dump_json()
     review_toon = to_toon(state.reviews.model_dump())
     
@@ -482,16 +502,24 @@ async def refinement_node(state: AgentState):
         HumanMessage(content=f"Review:\n{review_toon}\nAI Critique:\n{critique_toon}\nHuman Feedback:\n{human_feedback}\nDiff:\n{state.diff}")
     ]
     
-    response, used_model = await invoke_llm(ReviewReport, state, messages, force_cheap_model=True, max_tokens=1500)
-    
-    return {
-        "reviews": response, 
-        "refinement_count": state.refinement_count + 1, 
-        "tokens_saved": tokens_saved,
-        "human_feedback": None, # Reset feedback for next cycle
-        "status": "refinement_complete", 
-        "monologue": ["🔄 Refinement cycle finished. Incorporated feedback for improved accuracy."]
-    }
+    try:
+        response, used_model = await invoke_llm(ReviewReport, state, messages, force_cheap_model=True, max_tokens=1500)
+        return {
+            "reviews": response,
+            "status": "refine_complete",
+            "refinement_count": state.refinement_count + 1,
+            "human_feedback": None, # Clear it after applying
+            "tokens_saved": tokens_saved,
+            "monologue": ["✨ Refinement cycle completed. AI updated the review."]
+        }
+    except Exception as e:
+        logger.warning(f"Refinement failed: {e}")
+        return {
+            "status": "refine_failed",
+            "tokens_saved": tokens_saved,
+            "human_feedback": None, # Clear it anyway to break out of loop
+            "monologue": [f"⚠️ Refinement failed: {e}"]
+        }
 
 def should_refine(state: AgentState):
     """

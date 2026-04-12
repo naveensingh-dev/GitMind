@@ -24,8 +24,8 @@ export class AnalysisHistoryComponent {
 
   @Output() loadPastAnalysisAction = new EventEmitter<any>();
 
-  /** Active tab: 'reviewed' | 'failed' */
-  activeTab = signal<'reviewed' | 'failed'>('reviewed');
+  /** Active tab: 'reviewed' | 'failed' | 'partial' */
+  activeTab = signal<'reviewed' | 'failed' | 'partial'>('reviewed');
 
   // Filter Signals
   filterDate = signal<string>('');
@@ -35,9 +35,27 @@ export class AnalysisHistoryComponent {
   filterPat = signal<string>('');
   filterFailReason = signal<string>('');
 
-  // ── Reviewed PRs: approval_status !== 'failed' ──────────────────────────────
+  // ── Reviewed PRs: approval_status !== 'failed' and no error_message ──────────────────────────────
   reviewedHistory = computed(() => {
-    let data = this._history().filter(h => h.approval_status !== 'failed');
+    let data = this._history().filter(h => h.approval_status !== 'failed' && !h.error_message);
+    const dDate   = this.filterDate().toLowerCase();
+    const dModel  = this.filterModel().toLowerCase();
+    const dUrl    = this.filterUrl().toLowerCase();
+    const dLlmKey = this.filterLlmKey().toLowerCase();
+    const dPat    = this.filterPat().toLowerCase();
+
+    if (dDate)   data = data.filter(h => new Date(h.created_at).toLocaleDateString().toLowerCase().includes(dDate));
+    if (dModel)  data = data.filter(h => h.model && h.model.toLowerCase().includes(dModel));
+    if (dUrl)    data = data.filter(h => (h.repo || '').toLowerCase().includes(dUrl) || (h.github_url || '').toLowerCase().includes(dUrl));
+    if (dLlmKey) data = data.filter(h => (h.api_key || '').toLowerCase().includes(dLlmKey));
+    if (dPat)    data = data.filter(h => (h.github_token || '').toLowerCase().includes(dPat));
+
+    return data;
+  });
+
+  // ── Partial Pass PRs: approval_status !== 'failed' but has error_message ──────────────────────────
+  partialHistory = computed(() => {
+    let data = this._history().filter(h => h.approval_status !== 'failed' && !!h.error_message);
     const dDate   = this.filterDate().toLowerCase();
     const dModel  = this.filterModel().toLowerCase();
     const dUrl    = this.filterUrl().toLowerCase();
@@ -70,9 +88,12 @@ export class AnalysisHistoryComponent {
   });
 
   // Active dataset depends on current tab
-  filteredHistory = computed(() =>
-    this.activeTab() === 'reviewed' ? this.reviewedHistory() : this.failedHistory()
-  );
+  filteredHistory = computed(() => {
+    const tab = this.activeTab();
+    if (tab === 'reviewed') return this.reviewedHistory();
+    if (tab === 'partial') return this.partialHistory();
+    return this.failedHistory();
+  });
 
   // Pagination Signals
   currentPage = signal<number>(1);
@@ -85,7 +106,7 @@ export class AnalysisHistoryComponent {
     return this.filteredHistory().slice(start, start + this.pageSize());
   });
 
-  switchTab(tab: 'reviewed' | 'failed') {
+  switchTab(tab: 'reviewed' | 'failed' | 'partial') {
     this.activeTab.set(tab);
     this.currentPage.set(1);
     // Reset all filters on switch
@@ -134,10 +155,118 @@ export class AnalysisHistoryComponent {
     return 'Runtime Error';
   }
 
+  /** Export current tab's data as a CSV file */
+  exportCsv() {
+    const rows = this.filteredHistory();
+    const isReviewed = this.activeTab() === 'reviewed';
+
+    const headers = isReviewed
+      ? ['ID', 'Date', 'Repository', 'PR URL', 'Model', 'Provider', 'Status', 'Confidence', 'Security Issues', 'Performance Issues', 'Style Issues', 'High Severity']
+      : ['ID', 'Date', 'Repository', 'PR URL', 'Model', 'Provider', 'Error Type', 'Failure Reason'];
+
+    const escape = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(h => {
+        if (isReviewed) {
+          return [
+            h.id,
+            escape(h.created_at),
+            escape(h.repo),
+            escape(h.github_url),
+            escape(h.model),
+            escape(h.provider),
+            escape(h.approval_status),
+            h.confidence_score ?? 0,
+            h.security_count ?? 0,
+            h.performance_count ?? 0,
+            h.style_count ?? 0,
+            h.high_severity_count ?? 0,
+          ].join(',');
+        } else {
+          return [
+            h.id,
+            escape(h.created_at),
+            escape(h.repo),
+            escape(h.github_url),
+            escape(h.model),
+            escape(h.provider),
+            escape(this.classifyError(h.error_message)),
+            escape(h.error_message),
+          ].join(',');
+        }
+      })
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gitmind-${this.activeTab()}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   /** Securely mask API and GitHub PAT keys on screens */
   maskToken(token: string | null | undefined): string {
     if (!token) return 'None';
     if (token.length <= 4) return '****';
     return '******' + token.slice(-4);
+  }
+
+  /** Export reviewed findings as SARIF 2.1.0 (GitHub Code Scanning format) */
+  exportSarif(analysisRow: any) {
+    const review = analysisRow.review_json ? JSON.parse(analysisRow.review_json) : null;
+    if (!review) return;
+
+    const results: any[] = [];
+    const allFindings = [
+      ...(review.security || []).map((i: any) => ({ ...i, category: 'security' })),
+      ...(review.performance || []).map((i: any) => ({ ...i, category: 'performance' })),
+      ...(review.style || []).map((i: any) => ({ ...i, category: 'style' })),
+    ];
+
+    for (const finding of allFindings) {
+      results.push({
+        ruleId: `gitmind/${finding.category}`,
+        level: finding.severity === 'high' ? 'error' : finding.severity === 'medium' ? 'warning' : 'note',
+        message: { text: `${finding.issue}\n\nFix: ${finding.fix}` },
+        locations: [{
+          physicalLocation: {
+            artifactLocation: { uri: finding.file_path || 'unknown' },
+            region: { startLine: finding.line_number || 1 }
+          }
+        }]
+      });
+    }
+
+    const sarif = {
+      version: '2.1.0',
+      $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
+      runs: [{
+        tool: {
+          driver: {
+            name: 'GitMind',
+            version: '1.0.0',
+            informationUri: 'https://github.com/gitmind',
+            rules: [
+              { id: 'gitmind/security', name: 'SecurityReview', shortDescription: { text: 'Security analysis by GitMind AI' } },
+              { id: 'gitmind/performance', name: 'PerformanceReview', shortDescription: { text: 'Performance analysis by GitMind AI' } },
+              { id: 'gitmind/style', name: 'StyleReview', shortDescription: { text: 'Code style analysis by GitMind AI' } },
+            ]
+          }
+        },
+        results
+      }]
+    };
+
+    const blob = new Blob([JSON.stringify(sarif, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gitmind-${analysisRow.repo?.replace('/', '-')}-${new Date().toISOString().split('T')[0]}.sarif`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }

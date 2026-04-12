@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { TokenService } from './auth/token.service';
 
 export interface LogEntry {
   time: string;
@@ -13,6 +14,7 @@ export interface LogEntry {
 })
 export class ApiService {
   private http = inject(HttpClient);
+  private tokenService = inject(TokenService);
   private baseUrl = 'http://localhost:8000';
 
   fetchDiff(url: string): Observable<{ diff: string }> {
@@ -75,9 +77,16 @@ export class ApiService {
   private createSseObservable(url: string, payload: any): Observable<string> {
     return new Observable(observer => {
       const abortController = new AbortController();
+      const token = this.tokenService.getToken();
+      const headers = new Headers();
+      headers.append('Content-Type', 'application/json');
+      if (token) {
+        headers.append('Authorization', `Bearer ${token}`);
+      }
+
       fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify(payload),
         signal: abortController.signal
       }).then(response => {

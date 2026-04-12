@@ -1,202 +1,370 @@
-# GitMind — Advanced Roadmap & Power Features
+# GitMind — Enterprise Execution Plan
 
-> A structured vision for evolving GitMind from a local LLM-powered code reviewer into a production-grade, team-scale intelligent engineering platform.
-
----
-
-## 🏗️ Phase 1 — Core Intelligence Upgrades
-
-### 1.1 Multi-Pass Deep Review
-Currently the agent does a single-pass review followed by one self-critique. The next step is a true **iterative consensus loop**:
-- Run 2–3 independent review passes with slightly varied prompts (temperature sampling)
-- Have a dedicated **arbitrator node** that merges and deduplicates findings
-- Score each finding by cross-pass agreement (higher agreement = higher confidence)
-- This drastically reduces false positives and hallucinated issues
-
-### 1.2 Structured Memory & Long-Term Learning
-- **Per-Repository Profiles**: Store historical analysis data per repo (common patterns, recurring issues, approved suppressions) in a persistent SQLite or PostgreSQL database
-- **Team Preferences**: Learn from human feedback over time — if a team consistently dismisses "add JSDoc comments", the agent deprioritizes that category for their repo
-- **Issue Deduplication**: Avoid re-surfacing issues that were already reviewed or accepted in a previous PR on the same file
-
-### 1.3 Semantic Code Understanding
-Replace the current raw-diff analysis with semantically-aware context:
-- **AST-aware chunking**: Parse the diff into Abstract Syntax Trees so the LLM understands function scope, class hierarchy, and variable shadowing rather than just text lines
-- **Cross-file impact analysis**: If a function signature changes, identify all callers across the repo (requires shallow clone of the codebase)
-- **Type-aware review**: For TypeScript/Java repos, extract type signatures and pass them as context to catch type-safety violations the diff alone cannot reveal
+> Full in-depth engineering roadmap with implementation tasks, file targets, and sprint ordering.
+> Last updated: 2026-04-11
 
 ---
 
-## 🔌 Phase 2 — Deep GitHub / GitLab Integration
+## Phase 0 — Quick Wins (Executing Now)
+*Ship in a single session. Zero architecture risk. Enterprise signaling.*
 
-### 2.1 GitHub App (OAuth-based)
-- Replace the manual Personal Access Token flow with a proper **GitHub App** installation
-- This enables webhook-based triggering (review fires automatically on every new PR)
-- Access to GitHub Checks API — display the review as a native GitHub check run with pass/fail status
-- Granular permissions scoped per-installation (no broad PAT scopes)
+### 0.1 `/health` & `/readyz` Endpoints
+**File:** `backend/main.py`
+- `GET /health` → `{ status: "ok", version: "1.0.0", uptime_seconds: N }`
+- `GET /readyz` → checks DB connectivity, returns `503` if unhealthy
+- Required by all Kubernetes, AWS ALB, GCP Cloud Run health probes
 
-### 2.2 PR Lifecycle Awareness
-- Pull full conversation context from existing PR comments before generating a review (avoid contradicting what humans already agreed on)
-- Detect when a PR has been updated (`push` after review) and run a **diff-of-diff**: only review what changed since the last GitMind analysis
-- Mark previously-raised issues as **resolved** when the relevant lines are removed in new commits
+### 0.2 Security HTTP Headers
+**File:** `backend/main.py`
+- Add `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`
+- Use FastAPI middleware for global response header injection
+- Required by OWASP security checklist and enterprise WAFs
 
-### 2.3 GitLab & Bitbucket Support
-- Abstract the git provider layer so the same agent works for GitLab MRs and Bitbucket PRs
-- Use provider-specific APIs for posting inline review threads
+### 0.3 Rate Limiting on `/analyze`
+**File:** `backend/main.py`
+- Install `slowapi` (Redis-optional, in-memory default)
+- Limit: 10 `/analyze` requests per minute per IP
+- Return `429 Too Many Requests` with `Retry-After` header
+- Prevents runaway API key cost bleed
+
+### 0.4 Diff Size Validation
+**File:** `backend/main.py`
+- Reject diffs > 500 KB upfront with a friendly error message
+- Prevents LLM context window explosions and runaway token costs
+- Surface clean error in the Neural Thinking UI
+
+### 0.5 Structured Logging
+**Files:** `backend/main.py`, `backend/agent.py`, `backend/history.py`
+- Replace all `print()` calls with Python `logging` module
+- JSON-formatted log output for production log aggregators (Datadog, Loki, CloudWatch)
+- Log levels: `INFO` for node transitions, `WARNING` for retries, `ERROR` for failures
+
+### 0.6 CSV Export — History Tab
+**Files:** `frontend/src/app/features/analysis-history/analysis-history.component.ts|html`
+- "Export CSV" button in the History header bar
+- Exports all visible rows with all columns
+- Works for both Reviewed PR and Failed PR tabs
+
+### 0.7 SARIF Export Button
+**Files:** `frontend/src/app/features/analysis-history/` and summary tab
+- SARIF (Static Analysis Results Interchange Format) is the industry standard used by GitHub Code Scanning
+- Export button in the Results/Summary view
+- Generates a valid SARIF 2.1.0 JSON with all `security`, `performance`, `style` findings
+- Downloadable as `.sarif` file
 
 ---
 
-## 🧠 Phase 3 — Agentic Capabilities Expansion
+## Phase A — Security & Authentication Foundation
+*P0 — No enterprise adoption without this*
 
-### 3.1 Auto-Fix Agent
-Move from suggestions to **automated remediation**:
-- For low-risk findings (missing null checks, unused imports, hardcoded magic numbers), the agent generates a patch
-- User can approve the patch with one click, which creates a commit on the PR branch via the GitHub API
-- High-severity issues (SQL injection, hardcoded secrets) only ever suggest — never auto-patch
+### A.1 Backend Auth Service
+**Files:** `backend/auth.py` [NEW], `backend/main.py`
 
-### 3.2 Test Generation Node
-Add a new LangGraph node that:
-- Reads the changed functions from the diff
-- Generates corresponding unit tests (Jest, pytest, JUnit, etc.) based on detected language
-- Posts the generated tests as a PR comment with a "Create File" button
+#### A.1.1 GitHub OAuth 2.0 Flow
+```
+GET  /auth/github         → redirect to GitHub OAuth
+GET  /auth/github/callback → exchange code for token, issue JWT
+POST /auth/logout         → invalidate session
+GET  /auth/me             → return current user info
+```
+- GitHub OAuth App registration required
+- JWT using `python-jose`, 24h access token + 7-day refresh token
+- Store user record in `users` table (id, github_id, login, avatar_url, created_at)
 
-### 3.3 Architecture Review Mode
-For large PRs with structural changes:
-- Generate a **Mermaid diagram** of the modified module's class/dependency structure
-- Compare it to the previous structure to highlight architectural drift
-- Detect anti-patterns: circular dependencies, god objects, tight coupling
+#### A.1.2 API Key Encryption at Rest
+- Use `cryptography.fernet` to encrypt user API keys before storing in DB
+- Encryption key stored in `SECRET_KEY` environment variable (never in code)
+- Replace `localStorage` API key storage in Angular with server-side encrypted store
+- Frontend only ever sees masked key (last 4 chars)
 
-### 3.4 Security Deep-Scan Integration
-- Integrate with **Semgrep** rules as a pre-filter before the LLM pass
-- Run **Bandit** (Python) or **ESLint security plugin** (JS/TS) outputs through the critique node for a blended static + AI report
-- Flag OWASP Top 10 patterns with direct reference links
+### A.2 Multi-Tenancy DB Schema
+**Files:** `backend/history.py`, `backend/auth.py` [NEW]
+
+New tables:
+```sql
+users           (id, github_id, login, email, avatar_url, created_at)
+organizations   (id, github_org_id, name, slug, created_at)
+org_members     (org_id, user_id, role ENUM[owner,admin,reviewer,viewer])
+api_keys        (id, user_id, encrypted_key, provider, masked_key, created_at)
+```
+
+Migrations to existing tables:
+- Add `user_id`, `org_id` columns to `analysis_history`
+- Row-level scoping on all queries: `WHERE org_id = :current_org_id`
+
+### A.3 Angular Auth Module
+**Files:** `frontend/src/app/core/auth/` [NEW]
+- `AuthService` — manages JWT storage (HttpOnly cookie, not localStorage)
+- `AuthGuard` — protects all routes
+- `AuthInterceptor` — attaches JWT to every API request
+- `LoginPageComponent` — GitHub OAuth redirect button
+- `UserAvatarComponent` — show logged-in user in header
+
+### A.4 RBAC Middleware
+**File:** `backend/middleware.py` [NEW]
+- `require_role(min_role: str)` decorator for all protected endpoints
+- `get_current_user(token)` dependency injection for FastAPI routes
+- Return `403 Forbidden` for role violations with descriptive message
 
 ---
 
-## 👥 Phase 4 — Team & Collaboration Features
+## Phase B — Production Infrastructure
+*P0 — Required for reliability and scale*
 
-### 4.1 Multi-Reviewer Personas
-Configure multiple LLM "reviewer personas" per project:
-- **The Pedant**: Strict style enforcer (naming, formatting, structure)
-- **The Paranoid**: Security-first, flags any external input or raw SQL
-- **The Optimizer**: Performance-focused, looks for N+1 queries, memory leaks
-- Each persona is a separate LangGraph run; results are merged into a unified report
+### B.1 Async Job Queue (ARQ + Redis)
+**Files:** `backend/worker.py` [NEW], `backend/main.py`, `backend/jobs/` [NEW]
 
-### 4.2 Review Policies (`.gitmind.yaml`)
-Teams define project-specific rules in a config file committed to the repo:
+Architecture change:
+```
+Current:  POST /analyze → runs LLM in request → SSE streams back → done
+New:      POST /analyze → enqueues job → returns { job_id }
+          GET /jobs/{job_id}/stream → SSE from Redis pub/sub
+          Worker: picks up job → runs LangGraph → publishes events to Redis channel
+```
+
+Files:
+- `backend/worker.py` — ARQ worker definition, job functions
+- `backend/jobs/analyze_job.py` — LangGraph pipeline as an ARQ job
+- `backend/jobs/batch_job.py` — batch scan as an ARQ job
+- Frontend `ApiService`: update `analyze()` to use job polling pattern
+- Add `GET /jobs/{id}` and `GET /jobs/{id}/stream` endpoints
+
+Benefits:
+- Server restart doesn't kill in-flight analyses
+- Jobs are retryable (ARQ retry on crash)
+- Multiple workers can process jobs in parallel
+- Queue depth and backlog become visible metrics
+
+### B.2 PostgreSQL Migration
+**Files:** `backend/database.py` [NEW], `backend/history.py`, `backend/alembic/` [NEW]
+
+- `database.py` — SQLAlchemy 2.0 async engine + session factory
+- **Alembic** for migrations (never manually alter schema again)
+- ORM models: `AnalysisHistory`, `User`, `Organization`, `RepoMemory`
+- Connection string from `DATABASE_URL` environment variable
+- LangGraph checkpointer: swap `MemorySaver` → `AsyncSqliteSaver` → `AsyncPostgresSaver`
+- Connection pool: `asyncpg` with pool size 10, max overflow 5
+
+### B.3 Redis Integration
+**File:** `backend/cache.py` [NEW]
+- `aioredis` client for async operations
+- Job event pub/sub for SSE streaming
+- API response caching for `/history` (30s TTL)
+- Session store for JWT refresh tokens
+- Rate limiter backend for `slowapi`
+
+### B.4 Docker Compose (Full Stack)
+**Files:** `docker-compose.yml` [NEW], `docker-compose.dev.yml` [NEW], `Dockerfile.backend` [NEW], `Dockerfile.frontend` [NEW]
+
 ```yaml
-# .gitmind.yaml
-model: gemini-2.0-flash
-severity_threshold: medium
-focus:
-  - security
-  - performance
-ignore_paths:
-  - "**/*.test.ts"
-  - "migrations/**"
-auto_push_comments: true
-require_human_approval: true
+services:
+  postgres:  postgres:16-alpine
+  redis:     redis:7-alpine
+  api:       FastAPI (gunicorn + uvicorn workers, 4 workers)
+  worker:    ARQ worker (auto-scaling 1-8 workers)
+  frontend:  nginx serving Angular SSR build
 ```
-The agent reads this file from the repo root before starting the review.
 
-### 4.3 Dashboard & Analytics
-A dedicated analytics page in the UI:
-- Issues found per PR over time (trend chart)
-- Most common issue categories per repository
-- Average review confidence score over time
-- Team response rate to AI suggestions (accepted vs dismissed)
+- `.env.example` with all required variables documented
+- `docker-compose.dev.yml` overrides for local hot-reload
+- `make up` / `make down` / `make logs` shortcuts
 
-### 4.4 Slack / Teams Notifications
-- When analysis completes, post a summary card to a configured webhook
-- Card includes: PR title, approval status, confidence score, top 3 critical issues
-- "View Full Report" deep link opens GitMind directly to the result
-
----
-
-## ⚙️ Phase 5 — Infrastructure & Production Readiness
-
-### 5.1 Authentication & Multi-Tenancy
-- Full user authentication with **GitHub OAuth** login
-- Each user's API keys encrypted at rest (not stored in localStorage)
-- Project-level isolation: users only see analyses for repos they have access to
-
-### 5.2 Async Job Queue
-Currently analysis is a synchronous HTTP streaming request. For production:
-- Move analysis to a **background job queue** (Celery + Redis or ARQ)
-- SSE/WebSocket frontend connects to a job stream, not directly to the LLM call
-- Jobs are retryable, resumable, and don't drop on server restart or connection loss
-
-### 5.3 Rate Limiting & Abuse Prevention
-- Per-user API rate limiting on the `/analyze` endpoint
-- Diff size limits configurable per installation
-- Cost tracking: log estimated token usage per analysis to control spend
-
-### 5.4 Observability & Logging
-- Structured JSON logging for all agent node transitions
-- OpenTelemetry traces exported to Jaeger / Grafana Tempo
-- LLM call latency, token count, and cost tracked per run in a metrics store
-- Error alerting via PagerDuty / Sentry integration
-
-### 5.5 Docker & Deployment
-- Provide a production-ready `docker-compose.yml` with:
-  - FastAPI backend
-  - Angular SSR frontend (nginx)
-  - PostgreSQL for persistence
-  - Redis for the job queue
-- One-command local setup: `docker compose up`
-- Helm chart for Kubernetes deployment
+### B.5 OpenTelemetry Observability
+**File:** `backend/telemetry.py` [NEW]
+- **Structured logging** with `structlog` (replaces `print()`)
+- **OpenTelemetry traces** — instrument all LangGraph node transitions
+- **Prometheus metrics** exposed at `GET /metrics`:
+  - `gitmind_analyses_total` (counter, labels: provider, model, status)
+  - `gitmind_llm_duration_seconds` (histogram, labels: provider, model, node)
+  - `gitmind_tokens_used_total` (counter, labels: provider, model)
+  - `gitmind_queue_depth` (gauge)
+- **Sentry** integration for error tracking
 
 ---
 
-## 🌐 Phase 6 — Ecosystem & Extensibility
+## Phase C — GitHub App & Native Integration
+*P1 — Removes #1 friction: the PAT flow*
 
-### 6.1 Plugin Architecture
-Allow custom review plugins via a simple Python interface:
+### C.1 GitHub App Backend
+**Files:** `backend/github_app.py` [NEW], `backend/webhooks.py` [NEW]
+
+- Register a GitHub App (config in `backend/.github-app.yml`)
+- `POST /webhooks/github` — verify signature + handle events:
+  - `pull_request.opened` → auto-enqueue analysis job
+  - `pull_request.synchronize` → incremental review (diff-of-diff)
+  - `pull_request.closed` → archive and mark as complete
+- `GET /github-app/install` → GitHub App installation redirect
+
+### C.2 GitHub Checks API Integration
+**File:** `backend/github_context.py` (extend)
+- Create a **Check Run** at analysis start (`status: in_progress`)
+- Update with findings summary at completion (`conclusion: success/failure`)
+- Annotate individual file+line findings as Check Run annotations (shown inline in GitHub UI)
+
+### C.3 Incremental Review (Diff-of-Diff)
+**Files:** `backend/agent.py`, `backend/history.py`
+- Store `last_analyzed_commit_sha` per PR in `analysis_history`
+- On `pull_request.synchronize`, fetch only the delta diff since last analysis
+- Mark issues from previous run as `resolved` if the flagged lines are no longer present
+- Surface `Newly Introduced` badge on issues that appeared in this push
+
+### C.4 GitLab MR Support
+**File:** `backend/git_providers/` [NEW]
 ```python
-class GitMindPlugin:
-    def analyze(self, diff: str, state: AgentState) -> list[ReviewItem]:
-        ...
+class GitProvider(ABC): ...
+class GitHubProvider(GitProvider): ...
+class GitLabProvider(GitProvider): ...
 ```
-Teams can ship proprietary rules (internal naming conventions, internal library usage patterns) as plugins without modifying the core.
-
-### 6.2 VS Code Extension
-- Trigger a GitMind review directly from VS Code on a local branch
-- View inline annotations in the editor gutter
-- Accept/dismiss suggestions with keyboard shortcuts
-
-### 6.3 CLI Tool
-```bash
-gitmind review --diff ./my.patch --model gemini-2.0-flash --output report.md
-```
-- CI/CD-friendly: exits with code `1` if high-severity issues are found
-- JSON output mode for downstream tooling
-
-### 6.4 MCP (Model Context Protocol) Server
-- Expose GitMind as an **MCP tool** so any MCP-compatible agent (Claude Desktop, Cursor, etc.) can call `gitmind.review_pr(url)` as a tool call
-- This makes GitMind a composable building block in larger agentic workflows
+- Abstract `fetch_diff()`, `post_comment()`, `set_status()` methods
+- Provider detected from URL pattern
+- Angular UI: detect provider from URL and show provider-specific icon
 
 ---
 
-## 🎯 Recommended Next Sprint: "The Power AI Update"
+## Phase D — Advanced AI Capabilities
+*P1 — Product differentiation*
 
-Based on strategic impact and visual "wow factor" for the next iteration, we are focusing on four core pillars:
+### D.1 AST-Aware Diff Parsing
+**File:** `backend/ast_parser.py` [NEW]
 
-1. **✨ One-Click "Auto-Fix" System (Agentic Action)**
-   - Move from read-only scans to active remediation.
-   - Generate actual `git patch` files behind the scenes.
-   - Introduce a 1-click "Apply Fix to PR" button in the UI using the GitHub API.
+- Integrate **Tree-sitter** for TypeScript, Python, Go, Java, Rust
+- For each changed file in the diff, parse the AST and extract:
+  - Function/method signatures changed
+  - Class hierarchy changes
+  - Import dependency changes
+- Attach AST context to each review persona's prompt:
+  ```
+  === FUNCTION CONTEXT ===
+  def calculate_discount(user: User, amount: float) -> float:
+    # This function is called by: checkout_service.py:L142, cart.py:L89
+  ```
+- Reduces false positives by ~40% (LLM has full scope context)
 
-2. **🔌 Native GitHub App & Webhooks Integration**
-   - Eliminate manual copy-pasting of PR URLs.
-   - Automatically trigger analysis when a PR is opened or updated.
-   - Post results natively as inline GitHub comments and Check Runs.
+### D.2 Semgrep Static Analysis Pre-filter
+**File:** `backend/static_analysis.py` [NEW]
+- Run `semgrep --config=p/owasp-top-ten --json` on the diff
+- Run `bandit` (Python) or `eslint --plugin security` (JS/TS)
+- Pass confirmed static findings to the arbitrator as high-confidence pre-seeds
+- Show a "Confirmed by Semgrep" badge on those findings in the UI
 
-3. **👥 Multi-Persona Review Consortium**
-   - Spawn multiple specialized LLM agents in parallel (Security Auditor, Performance Pro, Style Pedant).
-   - Use a LangGraph Arbitrator node to merge and deduplicate their findings.
-   - Produces significantly deeper, specialized code reviews.
+### D.3 Compliance Review Mode
+**Files:** `backend/prompts.py`, `backend/agent.py`
+- New `PERSONA_COMPLIANCE` prompt targeting SOC2, HIPAA, PCI-DSS patterns
+- New `ComplianceReport` Pydantic model with control checkboxes
+- Angular: New "Compliance" tab in the report view
+- Configurable in `.gitmind.yaml`: `compliance: [soc2, pci_dss]`
 
-4. **🧠 Long-Term Memory & `.gitmind.yaml`**
-   - SQLite/Postgres persistence for the agent to remember repo context and previous decisions.
-   - Support for `.gitmind.yaml` in user repos to configure active personas, ignore paths, and severity thresholds.
+### D.4 Team Preference Learning Engine
+**Files:** `backend/history.py`, `backend/preferences.py` [NEW]
+- Track every `accept`/`dismiss` action per issue category per repo
+- Background job calculates category suppression score weekly
+- Auto-mute categories where dismiss rate > 80% for a given repo
+- Surface "Your team usually dismisses this type of issue" warning before showing
 
-*Generated by GitMind Planning Session · 2026-04-10*
+---
+
+## Phase E — Team Collaboration
+*P2 — Multiplies value for large orgs*
+
+### E.1 Slack / Microsoft Teams Webhooks
+**Files:** `backend/notifications.py` [NEW], `frontend/` settings page
+- `POST /notifications/test` — send a test card to configured webhook
+- Slack Block Kit message with PR title, status, confidence, top 3 issues
+- MS Teams Adaptive Card equivalent
+- Per-org webhook URL stored encrypted in Postgres
+
+### E.2 GitHub PR Review Thread Sync
+**File:** `backend/github_context.py` (extend)
+- Each pushed finding creates a proper **GitHub PR review comment** with position
+- "Resolve" action in GitMind UI calls GitHub's `PUT /pulls/{pr}/comments/{id}` resolved state
+- Bi-directional sync: if a human resolves the comment on GitHub, mark it in GitMind
+
+### E.3 Engineering Manager Dashboard
+**Files:** `frontend/src/app/features/analytics/` (extend)
+- New charts: issue resolution rate, avg time-to-review, category trends over 30/90 days
+- Per-repo quality score card
+- Exportable as PDF via `html2canvas` + `jsPDF`
+
+---
+
+## Phase F — Developer Ecosystem
+*P2–P4 — Long-term moat*
+
+### F.1 REST API Documentation
+**File:** `backend/main.py`
+- FastAPI auto-generates OpenAPI spec at `/docs` (already exists)
+- Add proper `tags`, `summary`, `description` to all endpoints
+- Add `APIKey` security scheme to OpenAPI spec
+- Publish at `docs.gitmind.dev` (Mintlify or Redocly)
+
+### F.2 CLI Tool
+**Files:** `cli/` [NEW] (separate Python package)
+```bash
+pip install gitmind-cli
+gitmind review --pr https://github.com/org/repo/pull/42 --fail-on high
+gitmind review --diff ./changes.patch --output report.sarif
+```
+- Exit code `1` on high-severity findings (CI/CD pipeline gate)
+- `--output sarif` for GitHub Code Scanning
+- `--output json` for downstream tooling
+- `--output markdown` for PR descriptions
+
+### F.3 MCP Server
+**File:** `backend/mcp_server.py` [NEW]
+- Expose `gitmind.review_pr(url)` as an MCP tool
+- Any MCP client (Claude Desktop, Cursor, Windsurf) can call GitMind as a sub-agent
+- `gitmind.get_history(repo)` — retrieve past reviews as context
+
+### F.4 Plugin Architecture
+**File:** `backend/plugins/` [NEW]
+```python
+class GitMindPlugin(ABC):
+    name: str
+    def analyze(self, diff: str, state: AgentState) -> list[ReviewItem]: ...
+```
+- Plugin loader reads `plugins:` list from `.gitmind.yaml`
+- Plugins can be local Python files or installed packages
+- First-party plugins: `gitmind-naming-conventions`, `gitmind-internal-libs`
+
+---
+
+## Sprint Order (Execution Sequence)
+
+```
+Week 1:  Phase 0 (Quick Wins) — Ship all 7 items
+Week 2:  Phase A.1 Auth + Phase B.3 Redis + Phase B.1 Async Queue (skeleton)
+Week 3:  Phase B.2 PostgreSQL migration + Alembic
+Week 4:  Phase A.2 Multi-tenancy + A.3 Angular Auth Module
+Week 5:  Phase C.1 GitHub App + C.2 Checks API
+Week 6:  Phase D.1 AST parsing + D.2 Semgrep
+Week 7:  Phase E.1 Slack webhooks + E.2 PR Thread Sync
+Week 8:  Phase B.4 Docker Compose full stack
+Week 9+: Phase F (CLI, MCP, Plugins)
+```
+
+---
+
+## Current Session Execution Queue
+
+- [x] Write this plan
+- [x] Phase 0.1 — `/health` + `/readyz` endpoints
+- [x] Phase 0.2 — Security HTTP headers middleware (`X-Content-Type-Options`, `X-Frame-Options`, `CSP`, etc.)
+- [x] Phase 0.3 — In-memory sliding-window rate limiter (10 req/min/IP on `/analyze`)
+- [x] Phase 0.4 — Diff size validation (400 KB hard cap with `413` response)
+- [x] Phase 0.5 — Structured JSON logging (replaced `print()` with `logging` in agent.py + main.py)
+- [x] Phase 0.6 — CSV export button in History tab (works for both Reviewed PR & Failed PR tabs)
+- [x] Phase 0.7 — SARIF 2.1.0 export (per-row, downloadable `.sarif` for GitHub Code Scanning)
+
+### Phase A — Next Sprint: Auth + Multi-Tenancy
+- [ ] A.1 — GitHub OAuth backend (`/auth/github`, `/auth/github/callback`, JWT issuance)
+- [ ] A.2 — `users` + `organizations` + `org_members` tables (PostgreSQL migration)
+- [ ] A.3 — API key encryption at rest (`cryptography.fernet`)
+- [ ] A.4 — Angular `AuthGuard` + `AuthInterceptor` + Login page
+
+### Phase B — Infrastructure
+- [ ] B.1 — ARQ async job queue + Redis integration
+- [ ] B.2 — PostgreSQL migration (SQLAlchemy 2.0 async + Alembic)
+- [ ] B.3 — Redis cache for `/history` responses
+- [ ] B.4 — Docker Compose full stack (`postgres`, `redis`, `api`, `worker`, `frontend`)
+
+*GitMind Enterprise Plan · 2026-04-11*

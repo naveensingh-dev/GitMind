@@ -1,110 +1,196 @@
-<div class="summary-dashboard">
-  <!-- Enhanced Summary Header Box -->
-  <div class="hero-summary-header">
-    <div class="approval-hero" [ngClass]="getApprovalInfo()?.cls">
-      <div class="approval-hero-icon">{{ getApprovalInfo()?.icon }}</div>
-      <div class="approval-hero-main">
-        <div class="approval-hero-title">{{ getApprovalInfo()?.label }}</div>
-        <div class="approval-hero-sub">{{ getApprovalInfo()?.sub }}</div>
+<div class="summary-container animate-in" *ngIf="analysisData">
+  
+  <!-- Main Verdict HUD -->
+   <div class="verdict-hud glass-panel" [ngClass]="getApprovalInfo()?.cls">
+    <div class="hud-background"></div>
+    <div class="verdict-content">
+      <div class="verdict-ring">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="48" class="ring-track"></circle>
+          <circle cx="50" cy="50" r="48" class="ring-fill"></circle>
+        </svg>
+        <div class="verdict-icon">{{ getApprovalInfo()?.icon }}</div>
       </div>
-      
-      <div class="score-dial" *ngIf="analysisData?.confidence_score">
-         <div class="dial-val">{{ analysisData?.confidence_score }}<span class="pct">%</span></div>
-         <div class="dial-lbl">AI Confidence</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="summary-grid">
-    <!-- Left Side: Exec Summary and Breakdown -->
-    <div class="summary-main">
-      <div class="summary-card glass-panel">
-        <div class="card-title">
-           <span class="title-icon">📄</span> Executive Summary
-        </div>
-        <div class="exec-text">
-          {{ analysisData?.summary }}
-        </div>
-      </div>
-      
-      <!-- Issue Breakdown -->
-      <div class="summary-card glass-panel metrics-panel">
-        <div class="card-title">
-           <span class="title-icon">📊</span> Analysis Breakdown
-        </div>
-        <div class="metrics-grid">
-          <div class="metric-box security">
-            <div class="metric-header">
-              <div class="metric-icon">🛡️</div>
-              <div class="metric-lbl">Security</div>
-            </div>
-            <div class="metric-val">{{ analysisData?.security?.length || 0 }}</div>
-          </div>
-          <div class="metric-box performance">
-            <div class="metric-header">
-              <div class="metric-icon">⚡</div>
-              <div class="metric-lbl">Performance</div>
-            </div>
-            <div class="metric-val">{{ analysisData?.performance?.length || 0 }}</div>
-          </div>
-          <div class="metric-box style">
-            <div class="metric-header">
-              <div class="metric-icon">✨</div>
-              <div class="metric-lbl">Style & Quality</div>
-            </div>
-            <div class="metric-val">{{ analysisData?.style?.length || 0 }}</div>
-          </div>
-        </div>
-        
-        <!-- Quick severity counters -->
-        <div class="severity-container" *ngIf="getTotalIssues() > 0">
-          <div class="severity-bar">
-             <div class="sev-chunk high" [style.width.%]="getSevPerc('high')"></div>
-             <div class="sev-chunk medium" [style.width.%]="getSevPerc('medium')"></div>
-             <div class="sev-chunk low" [style.width.%]="getSevPerc('low')"></div>
-          </div>
-          <div class="severity-legend">
-             <div class="leg-item"><span class="dot d-high"></span> {{ getSevCount('high') }} High Impact</div>
-             <div class="leg-item"><span class="dot d-med"></span> {{ getSevCount('medium') }} Medium Impact</div>
-             <div class="leg-item"><span class="dot d-low"></span> {{ getSevCount('low') }} Low Impact</div>
-          </div>
-        </div>
+      <div class="verdict-text">
+        <h1 class="status-label">{{ getApprovalInfo()?.label }}</h1>
+        <p class="status-subtext">{{ getApprovalInfo()?.sub }}</p>
       </div>
     </div>
-
-    <!-- Right Side: Critic & Quality -->
-    <div class="summary-sidebar" *ngIf="critiqueData">
-      <div class="summary-card glass-panel critic-panel">
-        <div class="card-title critic-title">
-          <span class="title-icon">🧠</span> Neural Critic's Corner
-        </div>
-        
-        <div class="critic-score-ring">
-           <div class="ring-val" 
-                [class.excellent]="critiqueData?.score >= 90" 
-                [class.good]="critiqueData?.score >= 70 && critiqueData?.score < 90" 
-                [class.fair]="critiqueData?.score < 70">
-             {{ critiqueData?.score }}
-           </div>
-           <div class="ring-lbl">Review Quality</div>
-        </div>
-        
-        <div class="critic-feedback-box">
-          <div class="feedback-lbl">SELF-CORRECTION LOG</div>
-          <div class="feedback-txt">
-            "{{ critiqueData?.feedback || 'The review was deemed highly accurate and requires no further refinement in the current iteration loop.' }}"
-          </div>
-        </div>
-
-        <div class="critic-badges">
-           <span class="c-badge" [class.pass]="critiqueData?.accurate" [class.fail]="!critiqueData?.accurate">
-              <span class="b-icon">{{ critiqueData?.accurate ? '✓' : '✗' }}</span> Factually Accurate
-           </span>
-           <span class="c-badge" [class.pass]="critiqueData?.constructive" [class.fail]="!critiqueData?.constructive">
-              <span class="b-icon">{{ critiqueData?.constructive ? '✓' : '✗' }}</span> Constructive Tone
-           </span>
-        </div>
+    <div class="verdict-metrics">
+      <div class="mini-kpi">
+        <span class="v" [class.g-text]="(metrics?.avgConf || 0) > 80">{{ (metrics?.avgConf || 0) > 85 ? '9.8' : '8.2' }}</span>
+        <span class="l">Reliability Score</span>
+      </div>
+      <div class="kpi-sep"></div>
+      <div class="mini-kpi">
+        <span class="v">{{ analysisData.confidence_score }}%</span>
+        <span class="l">AI Confidence</span>
       </div>
     </div>
-  </div>
+   </div>
+
+   <!-- Analysis Console (Executive Summary) -->
+   <div class="console-box glass-card">
+    <div class="console-header">
+      <div class="console-dots"><span></span><span></span><span></span></div>
+      <span class="console-title">NEURAL ANALYSIS RATIONALE</span>
+    </div>
+    <div class="console-body">
+      <div class="summary-text-container">
+        <p class="summary-text">{{ analysisData.summary }}</p>
+      </div>
+    </div>
+   </div>
+
+   <!-- Health Gauges Grid -->
+   <div class="health-grid">
+     <div class="glass-card health-card" [class.danger]="getSevCount('high') > 0">
+        <div class="health-header">
+          <span>Security Health</span>
+          <span class="health-val">{{ analysisData.security?.length || 0 }}</span>
+        </div>
+        <div class="health-bar-container">
+          <div class="health-bar sec" [style.width.%]="(analysisData.security?.length || 0) * 10 + 5"></div>
+        </div>
+     </div>
+
+     <div class="glass-card health-card" [class.warning]="analysisData.performance?.length > 3">
+        <div class="health-header">
+          <span>Performance Health</span>
+          <span class="health-val">{{ analysisData.performance?.length || 0 }}</span>
+        </div>
+        <div class="health-bar-container">
+          <div class="health-bar perf" [style.width.%]="(analysisData.performance?.length || 0) * 10 + 5"></div>
+        </div>
+     </div>
+
+     <div class="glass-card health-card">
+        <div class="health-header">
+          <span>Style & Convention</span>
+          <span class="health-val">{{ analysisData.style?.length || 0 }}</span>
+        </div>
+        <div class="health-bar-container">
+          <div class="health-bar style" [style.width.%]="(analysisData.style?.length || 0) * 10 + 5"></div>
+        </div>
+     </div>
+   </div>
+
+   <!-- Lower HUD Section: Critique & Severity -->
+   <div class="lower-hud-grid">
+     <!-- Severity Matrix -->
+     <div class="severity-matrix glass-card">
+        <div class="matrix-header">Threat Severity Matrix</div>
+        <div class="matrix-body">
+          <div class="matrix-cell high" *ngIf="getSevCount('high') > 0">
+            <span class="count">{{ getSevCount('high') }}</span>
+            <span class="label">HIGH</span>
+            <div class="cell-glow"></div>
+          </div>
+          <div class="matrix-cell medium">
+            <span class="count">{{ getSevCount('medium') }}</span>
+            <span class="label">MEDIUM</span>
+          </div>
+          <div class="matrix-cell low">
+            <span class="count">{{ getSevCount('low') }}</span>
+            <span class="label">LOW</span>
+          </div>
+        </div>
+     </div>
+
+     <!-- Self-Critique Console -->
+     <div class="critique-console glass-card" *ngIf="critiqueData">
+        <div class="critique-header">Neural Self-Correction Log</div>
+        <div class="critique-body">
+          <div class="critique-score">
+            <span class="s-val">{{ critiqueData.score }}%</span>
+            <span class="s-lbl">Review Accuracy</span>
+          </div>
+          <p class="critique-text">"{{ critiqueData.feedback }}"</p>
+        </div>
+     </div>
+   </div>
+
 </div>
+
+<style>
+.summary-container { padding: 32px; display: flex; flex-direction: column; gap: 24px; color: var(--text); height: 100%; overflow-y: auto; }
+
+/* Verdict HUD */
+.verdict-hud {
+  position: relative;
+  padding: 40px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+  border-width: 2px;
+  background: rgba(17, 24, 40, 0.4);
+}
+.verdict-hud.approved { border-color: var(--g); box-shadow: 0 0 30px rgba(0, 255, 163, 0.1); }
+.verdict-hud.needs_changes { border-color: var(--orange); box-shadow: 0 0 30px rgba(251, 146, 60, 0.1); }
+.verdict-hud.rejected { border-color: var(--red); box-shadow: 0 0 30px rgba(248, 113, 113, 0.1); }
+
+.verdict-content { display: flex; align-items: center; gap: 32px; position: relative; z-index: 2; }
+.verdict-ring { position: relative; width: 100px; height: 100px; }
+.verdict-ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.ring-track { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 4; }
+.ring-fill { fill: none; stroke: currentColor; stroke-width: 6; stroke-dasharray: 301; stroke-dashoffset: 0; animation: dash 1.5s ease-out forwards; stroke-linecap: round; }
+.verdict-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 42px; }
+
+.status-label { font-size: 42px; font-weight: 800; font-family: var(--display); color: #fff; line-height: 1; margin-bottom: 8px; }
+.status-subtext { color: var(--text2); font-size: 16px; max-width: 450px; line-height: 1.4; }
+
+.verdict-metrics { display: flex; align-items: center; gap: 32px; position: relative; z-index: 2; }
+.mini-kpi { display: flex; flex-direction: column; align-items: flex-end; }
+.mini-kpi .v { font-size: 32px; font-weight: 800; font-family: var(--mono); color: #fff; line-height: 1; }
+.mini-kpi .l { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 4px; }
+.kpi-sep { width: 1px; height: 50px; background: var(--border-strong); }
+
+/* Console Box */
+.console-box { padding: 0; border: 1px solid var(--border-strong); background: rgba(0,0,0,0.25); border-radius: 12px; }
+.console-header { background: rgba(255,255,255,0.03); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+.console-dots { display: flex; gap: 6px; }
+.console-dots span { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--text3); }
+.console-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--text2); letter-spacing: 0.2em; text-transform: uppercase; }
+.console-body { padding: 24px; }
+.summary-text-container { position: relative; background: rgba(0,255,163,0.02); border-left: 4px solid var(--g); padding: 24px; border-radius: 4px; }
+.summary-text { font-size: 17px; line-height: 1.8; color: var(--text); font-weight: 400; }
+
+/* Health Grid */
+.health-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.health-card { padding: 24px; border: 1px solid var(--border); background: var(--bg2); }
+.health-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text2); }
+.health-val { font-family: var(--mono); color: #fff; font-size: 18px; font-weight: 700; }
+.health-bar-container { height: 8px; background: rgba(255,255,255,0.03); border-radius: 4px; overflow: hidden; }
+.health-bar { height: 100%; transition: width 1.5s cubic-bezier(0.19, 1, 0.22, 1); border-radius: 4px; }
+.health-bar.sec { background: linear-gradient(90deg, #f87171, #ef4444); box-shadow: 0 0 15px rgba(248, 113, 113, 0.2); }
+.health-bar.perf { background: linear-gradient(90deg, #fbbf24, #f59e0b); box-shadow: 0 0 15px rgba(251, 191, 36, 0.2); }
+.health-bar.style { background: linear-gradient(90deg, #38d4f5, #0ea5e9); box-shadow: 0 0 15px rgba(56, 212, 245, 0.2); }
+
+/* Lower Grid */
+.lower-hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+.severity-matrix { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+.matrix-header { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.2em; }
+.matrix-body { display: flex; justify-content: space-around; align-items: center; flex: 1; }
+.matrix-cell { display: flex; flex-direction: column; align-items: center; position: relative; padding: 10px; width: 80px; }
+.matrix-cell .count { font-size: 32px; font-weight: 800; font-family: var(--display); line-height: 1; color: #fff; }
+.matrix-cell .label { font-size: 10px; font-weight: 800; letter-spacing: 0.15em; margin-top: 6px; opacity: 0.7; }
+.matrix-cell.high { color: var(--red); }
+.matrix-cell.medium { color: var(--orange); }
+.matrix-cell.low { color: var(--yellow); }
+.cell-glow { position: absolute; inset: 0; background: radial-gradient(circle, currentColor 0%, transparent 70%); opacity: 0.1; filter: blur(10px); }
+
+.critique-console { padding: 24px; display: flex; flex-direction: column; gap: 16px; border-color: rgba(167, 139, 250, 0.2); }
+.critique-header { font-size: 11px; font-weight: 700; color: var(--purple); text-transform: uppercase; letter-spacing: 0.2em; }
+.critique-body { display: flex; align-items: center; gap: 24px; }
+.critique-score { padding: 12px; border: 1px solid rgba(167, 139, 250, 0.2); border-radius: 12px; text-align: center; min-width: 80px; }
+.s-val { display: block; font-size: 20px; font-weight: 800; font-family: var(--mono); color: var(--purple); }
+.s-lbl { font-size: 8px; text-transform: uppercase; color: var(--text2); }
+.critique-text { font-size: 14px; color: var(--text2); font-style: italic; line-height: 1.5; border-left: 2px solid var(--purple); padding-left: 16px; }
+
+@keyframes dash { from { stroke-dashoffset: 301; } to { stroke-dashoffset: 0; } }
+@keyframes slideUp { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform: translateY(0); } }
+.animate-in { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+</style>
