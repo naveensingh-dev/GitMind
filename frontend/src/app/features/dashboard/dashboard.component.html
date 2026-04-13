@@ -9,7 +9,9 @@
 </app-overlays>
 
 <!-- ✨ STAGED FIXES FLOATING BANNER -->
-<div *ngIf="stagedFixes().length > 0"
+<section *ngIf="stagedFixes().length > 0"
+     role="status"
+     aria-live="polite"
      style="
        position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
        z-index: 9999;
@@ -25,7 +27,7 @@
 
   <!-- Count pill -->
   <span style="display:flex; align-items:center; gap:8px;">
-    <span style="font-size:22px;">📦</span>
+    <span style="font-size:22px;" aria-hidden="true">📦</span>
     <span style="font-size:14px; font-weight:700; color:#fff;">
       {{ stagedFixes().length }} fix{{ stagedFixes().length === 1 ? '' : 'es' }} staged
     </span>
@@ -40,6 +42,7 @@
   <button
     (click)="pushStagedFixes()"
     [disabled]="isPushingFixes()"
+    aria-label="Push staged fixes to GitHub"
     style="
       display: flex; align-items: center; gap: 8px;
       background: linear-gradient(135deg, #00ffa3, #00c87a);
@@ -56,17 +59,18 @@
   <button
     (click)="stagedFixes.set([])"
     [disabled]="isPushingFixes()"
+    aria-label="Clear all staged fixes"
     title="Clear all staged fixes"
     style="background:transparent; border:1px solid #444; color:#888; border-radius:6px; padding:6px 10px; cursor:pointer; font-size:12px;">
     ✕
   </button>
-</div>
+</section>
 
 <!-- APP -->
-<div class="app" [class.no-sidebar]="true" [class.left-panel-collapsed]="isLeftPanelCollapsed()">
+<main class="app" [class.no-sidebar]="true" [class.left-panel-collapsed]="isLeftPanelCollapsed()">
 
   <!-- RIGHT PANEL -->
-  <div class="right-panel">
+  <section class="right-panel" aria-label="Analysis Dashboard">
     <app-report-header
       [diffInput]="diffInput()"
       [analysisData]="analysisData()"
@@ -77,10 +81,10 @@
       (startAnalysisAction)="startAnalysis()">
     </app-report-header>
     
-    <div class="results-area">
+    <div class="results-area" role="region" aria-label="Analysis Results">
       <!-- Placeholder when nothing is loaded -->
       <div class="results-placeholder" *ngIf="!diffInput() && !analysisData() && !analysisHistory().length && currentTab() !== 'history' && currentTab() !== 'analytics'">
-        <div class="placeholder-icon">🚀</div>
+        <div class="placeholder-icon" aria-hidden="true">🚀</div>
         <div class="placeholder-text">Enter a GitHub URL or load an example<br>to begin the automated code review.</div>
       </div>
 
@@ -91,18 +95,20 @@
 
         <!-- Horizontal: icon rail left + content right -->
         <div class="rail-layout">
-          <app-tabs-bar
-            [currentTab]="currentTab()"
-            [diffInput]="diffInput()"
-            [isAnalyzing]="isAnalyzing()"
-            [analysisHistory]="analysisHistory()"
-            [analysisData]="analysisData()"
-            [dashboardMetrics]="dashboardMetrics()"
-            [autoFixes]="autoFixes()"
-            [generatedTests]="generatedTests()"
-            [archReview]="archReview()"
-            (switchTabAction)="switchTab($event)">
-          </app-tabs-bar>
+          <nav aria-label="Analysis Tabs">
+            <app-tabs-bar
+              [currentTab]="currentTab()"
+              [diffInput]="diffInput()"
+              [isAnalyzing]="isAnalyzing()"
+              [analysisHistory]="analysisHistory()"
+              [analysisData]="analysisData()"
+              [dashboardMetrics]="dashboardMetrics()"
+              [autoFixes]="autoFixes()"
+              [generatedTests]="generatedTests()"
+              [archReview]="archReview()"
+              (switchTabAction)="switchTab($event)">
+            </app-tabs-bar>
+          </nav>
 
           <app-sidebar-layout
             *ngIf="diffInput() && (currentTab() === 'diff' || currentTab() === 'report')"
@@ -113,9 +119,9 @@
             (scrollToFileAction)="scrollToFile($event)">
           </app-sidebar-layout>
 
-          <div class="tab-panels">
+          <section class="tab-panels" aria-label="Tab Content">
             <!-- Skeleton loader shown during tab transitions -->
-            <div class="tab-skeleton" *ngIf="tabLoading()">
+            <div class="tab-skeleton" *ngIf="tabLoading()" role="status" aria-busy="true" aria-label="Loading tab content">
               <div class="skeleton-pulse"></div>
               <div class="skeleton-pulse short"></div>
               <div class="skeleton-pulse"></div>
@@ -124,9 +130,13 @@
 
           <!-- Analytics Dashboard Tab -->
           <div class="tab-panel active" *ngIf="currentTab() === 'analytics'">
-            <app-analytics-dashboard *ngIf="dashboardMetrics()" [metrics]="dashboardMetrics()!"></app-analytics-dashboard>
+            @defer (on interaction) {
+              <app-analytics-dashboard *ngIf="dashboardMetrics()" [metrics]="dashboardMetrics()!"></app-analytics-dashboard>
+            } @placeholder {
+              <div class="skeleton-hud"></div>
+            }
             <div class="empty-state" *ngIf="!dashboardMetrics()">
-              <div class="empty-icon">📊</div>
+              <div class="empty-icon" aria-label="Chart icon representing empty analytics" aria-hidden="false">📊</div>
               <div class="empty-text">No analytics data available.</div>
             </div>
           </div>
@@ -139,29 +149,37 @@
               (loadPastAnalysisAction)="loadPastAnalysis($event)">
             </app-analysis-history>
             <div class="empty-state" *ngIf="!analysisHistory().length">
-              <div class="empty-icon">📂</div>
+              <div class="empty-icon" aria-label="Folder icon representing empty history" aria-hidden="false">📂</div>
               <div class="empty-text">No history found. Try running an analysis first!</div>
             </div>
           </div>
 
           <!-- Diff Tab — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'diff'">
-            <app-diff-viewer *ngIf="diffInput()" [files]="parsedFiles()"></app-diff-viewer>
+            @defer (on interaction) {
+              <app-diff-viewer *ngIf="diffInput()" [files]="parsedFiles()"></app-diff-viewer>
+            } @placeholder {
+              <div class="skeleton-hud"></div>
+            }
             <div class="empty-state" *ngIf="!diffInput()">
-              <div class="empty-icon">🔍</div>
+              <div class="empty-icon" aria-label="Magnifying glass representing no diff loaded" aria-hidden="false">🔍</div>
               <div class="empty-text">No diff loaded. Fetch a pull request to see changes.</div>
             </div>
           </div>
 
           <!-- Summary Tab — Lazy rendered -->
           <div class="tab-panel active" *ngIf="currentTab() === 'summary'">
-            <app-summary-tab *ngIf="analysisData()" 
-              [analysisData]="analysisData()" 
-              [critiqueData]="critiqueData()"
-              [metrics]="dashboardMetrics()">
-            </app-summary-tab>
+            @defer (on idle) {
+              <app-summary-tab *ngIf="analysisData()" 
+                [analysisData]="analysisData()" 
+                [critiqueData]="critiqueData()"
+                [metrics]="dashboardMetrics()">
+              </app-summary-tab>
+            } @placeholder {
+              <div class="skeleton-hud"></div>
+            }
             <div class="empty-state" *ngIf="!analysisData()">
-              <div class="empty-icon">📋</div>
+              <div class="empty-icon" aria-label="Clipboard icon representing empty summary" aria-hidden="false">📋</div>
               <div class="empty-text">No summary data available. Run an analysis.</div>
             </div>
           </div>
@@ -178,7 +196,7 @@
               (dismissItem)="dismissIssue($event, 'security')">
             </app-review-panel>
             <div class="empty-state" *ngIf="!analysisData()?.security?.length">
-              <div class="empty-icon">🛡️</div>
+              <div class="empty-icon" aria-label="Shield icon representing no security issues" aria-hidden="false">🛡️</div>
               <div class="empty-text">No security issues detected!</div>
             </div>
           </div>
@@ -194,7 +212,7 @@
               (dismissItem)="dismissIssue($event, 'performance')">
             </app-review-panel>
             <div class="empty-state" *ngIf="!analysisData()?.performance?.length">
-              <div class="empty-icon">⚡</div>
+              <div class="empty-icon" aria-label="Lightning icon representing no performance issues" aria-hidden="false">⚡</div>
               <div class="empty-text">No performance issues detected!</div>
             </div>
           </div>
@@ -210,7 +228,7 @@
               (dismissItem)="dismissIssue($event, 'style')">
             </app-review-panel>
             <div class="empty-state" *ngIf="!analysisData()?.style?.length">
-              <div class="empty-icon">✨</div>
+              <div class="empty-icon" aria-label="Sparkles icon representing no style issues" aria-hidden="false">✨</div>
               <div class="empty-text">No code style issues found!</div>
             </div>
           </div>
@@ -237,7 +255,11 @@
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'arch'">
-            <app-arch-tab *ngIf="archReview()" [archReview]="archReview()"></app-arch-tab>
+            @defer (on interaction) {
+              <app-arch-tab *ngIf="archReview()" [archReview]="archReview()"></app-arch-tab>
+            } @placeholder {
+              <div class="skeleton-hud"></div>
+            }
             <div class="empty-state" *ngIf="!archReview()">
               <div class="empty-icon">🏗️</div>
               <div class="empty-text">No architectural review provided.</div>
@@ -264,34 +286,41 @@
               <div class="empty-text">No activity logs available.</div>
             </div>
           </div>
-          </div><!-- /tab-panels -->
+          </section><!-- /tab-panels -->
         </div><!-- /rail-layout -->
       </div><!-- /results-content -->
     </div><!-- /results-area -->
-  </div><!-- /right-panel -->
-</div><!-- /app -->
+  </section><!-- /right-panel -->
+</main><!-- /app -->
 
 <!-- FLOATING GLASS COMMAND CENTER -->
-<div class="floating-agent-panel" appDraggable
+<aside class="floating-agent-panel" appDraggable
+     role="complementary"
+     aria-label="Agent Command Center"
      [class.centered-hero]="!diffInput()" 
      [class.bottom-dock]="!!diffInput()" 
      [class.collapsed]="isLeftPanelCollapsed()">
      
   <!-- Collapse Toggle FAB Button (when minimized) -->
-  <div class="agent-fab-button" *ngIf="isLeftPanelCollapsed()" (click)="toggleLeftPanel()" title="Expand Agent Panel">
-    <div class="fab-icon">🤖</div>
-  </div>
+  <button class="agent-fab-button" *ngIf="isLeftPanelCollapsed()" 
+          (click)="toggleLeftPanel()" 
+          aria-label="Expand Agent Panel"
+          title="Expand Agent Panel">
+    <div class="fab-icon" aria-hidden="true">🤖</div>
+  </button>
 
   <!-- Main Floating Widget Content -->
   <div class="floating-glass-content" *ngIf="!isLeftPanelCollapsed()">
-    <div class="floating-header">
+    <header class="floating-header">
       <span class="widget-title">Agent Console</span>
       <div class="widget-controls">
-        <button class="minimize-btn" (click)="toggleLeftPanel()" title="Minimize to Dock">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <button class="minimize-btn" (click)="toggleLeftPanel()" 
+                aria-label="Minimize Agent Console"
+                title="Minimize to Dock">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </button>
       </div>
-    </div>
+    </header>
     
     <app-agent-controls
       [prUrl]="prUrl()"
@@ -325,4 +354,4 @@
       (submitFeedbackAction)="submitFeedback()">
     </app-human-feedback>
   </div>
-</div>
+</aside>

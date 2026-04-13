@@ -8,7 +8,7 @@ import { AuthService } from '../../../core/auth/auth.service';
   imports: [CommonModule],
   template: `
     <header>
-      <a class="logo" href="/">
+      <a class="logo" href="/" aria-label="GitMind Home">
         <div class="logo-icon">
           <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="16" cy="16" r="14" stroke="#00ffa3" stroke-width="1.2" opacity="0.4"/>
@@ -20,7 +20,7 @@ import { AuthService } from '../../../core/auth/auth.service';
             <line x1="9" y1="22" x2="21" y2="22" stroke="#38d4f5" stroke-width="1" opacity="0.4" stroke-dasharray="2 2"/>
           </svg>
         </div>
-        <span class="logo-text">Git<span>Mind</span></span>
+        <h1 class="logo-text">Git<span>Mind</span></h1>
       </a>
 
       <div class="header-right">
@@ -34,7 +34,8 @@ import { AuthService } from '../../../core/auth/auth.service';
         <div class="enterprise-divider"></div>
 
         <!-- User Profile Section -->
-        <div class="user-profile" *ngIf="auth.currentUser() as user" (click)="toggleProfileMenu($event)">
+        <div class="user-profile" *ngIf="auth.currentUser() as user" (click)="toggleProfileMenu($event)" 
+             role="button" aria-haspopup="true" [attr.aria-expanded]="isProfileMenuOpen()" aria-label="User Profile Menu">
           <div class="user-info">
             <span class="user-login">{{ user.login }}</span>
             <span class="user-role">Enterprise</span>
@@ -181,6 +182,20 @@ import { AuthService } from '../../../core/auth/auth.service';
       font-weight: 600;
       color: #00ffa3;
       margin-right: 8px;
+    }
+    header a.logo { 
+      text-decoration: none; 
+      color: inherit;
+    }
+    h1.logo-text {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+    h1.logo-text span {
+      color: var(--primary);
     }
     .status-dot { margin-left: 12px; }
   `]

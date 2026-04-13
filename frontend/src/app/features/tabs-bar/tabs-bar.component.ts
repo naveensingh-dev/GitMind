@@ -75,6 +75,7 @@ export interface TabDef {
     .nav-rail {
       width: 92px;
       min-width: 92px;
+      height:100%;
       background: var(--bg1);
       border-right: 1px solid var(--border);
       display: flex;
@@ -190,7 +191,7 @@ export class TabsBarComponent {
     const tabs: TabDef[] = [];
     // Always allow history access
     tabs.push({ id: 'history', icon: '📂', label: 'History', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });
-    
+
     if (this.diffInput) {
       tabs.push({ id: 'diff', icon: '🔍', label: 'Diff', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });
       tabs.push({ id: 'logs', icon: '📝', label: 'Logs', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });

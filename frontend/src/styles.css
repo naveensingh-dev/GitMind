@@ -1043,43 +1043,34 @@ header {
   overflow: hidden;
 }
 
-/* Skeleton loader for tab transitions */
+/* Skeleton loader for tab transitions - Upgraded to Neural Glass */
 .tab-skeleton {
-  padding: 20px 0;
+  padding: 40px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
 .skeleton-pulse {
-  height: 18px;
-  border-radius: 8px;
+  height: 24px;
+  border-radius: 12px;
   background: linear-gradient(90deg,
-      var(--bg2) 0%,
-      var(--bg3) 40%,
-      var(--bg2) 80%);
-  background-size: 300% 100%;
-  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(0, 255, 163, 0.1) 50%,
+      rgba(255, 255, 255, 0.03) 100%);
+  background-size: 200% 100%;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  animation: neural-skeleton-pulse 1.5s ease-in-out infinite;
 }
 
-.skeleton-pulse.short {
-  width: 45%;
-  height: 14px;
-}
+.skeleton-pulse.short { width: 30%; height: 16px; }
+.skeleton-pulse.medium { width: 60%; height: 16px; }
 
-.skeleton-pulse.medium {
-  width: 70%;
-  height: 14px;
-}
-
-@keyframes skeleton-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-
-  100% {
-    background-position: -100% 0;
-  }
+@keyframes neural-skeleton-pulse {
+  0% { background-position: 100% 0; opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { background-position: -100% 0; opacity: 0.5; }
 }
 
 /* Approval badge */
