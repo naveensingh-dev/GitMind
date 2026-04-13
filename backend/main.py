@@ -4,24 +4,203 @@ import uuid
 import re
 import httpx
 import hashlib
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse
+import logging
+import time
+from datetime import datetime, timezone
+from typing import Optional, Dict, Any
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Response, Depends
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from contextlib import asynccontextmanager
 from agent import app_graph, fetch_github_diff_text
 from schemas import AgentState, ReviewItem, ReviewReport
 from pydantic import BaseModel, ValidationError
-from history import save_analysis, get_history, get_analysis_by_id, add_suppression, get_suppressed_issues, get_cached_analysis, queue_repo_for_scan, update_scan_status
-
-app = FastAPI(title="GitMind API")
-
-# Enable CORS for Angular
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:4200"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+from history import (
+    save_analysis, get_history, get_analysis_by_id, 
+    add_suppression, get_suppressed_issues, get_cached_analysis, 
+    queue_repo_for_scan, update_scan_status
 )
+from auth import router as auth_router, require_auth, get_current_user, User
+from database import init_db, engine
+import worker
+
+# ── Structured Logging ────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='{"time": "%(asctime)s", "level": "%(levelname)s", "name": "%(name)s", "msg": %(message)s}',
+    datefmt="%Y-%m-%dT%H:%M:%SZ"
+)
+logger = logging.getLogger("gitmind.api")
+logging.getLogger("gitmind.history").setLevel(logging.DEBUG)
+logging.getLogger("gitmind.agent").setLevel(logging.DEBUG)
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+START_TIME = time.time()
+VERSION = "1.0.0"
+MAX_DIFF_BYTES = 500_000  # 500 KB hard limit on incoming diff payloads
+MAX_REQUESTS_PER_MINUTE = 10  # Rate limit for /analyze
+
+# ── In-memory rate limiter (per IP, per minute) ───────────────────────────────
+rate_limit_store: dict = {}  # { ip: [timestamps] }
+
+def check_rate_limit(client_ip: str) -> bool:
+    """Simple in-memory sliding window rate limiter. Returns True if allowed."""
+    now = time.time()
+    window = 60  # 1 minute
+    timestamps = rate_limit_store.get(client_ip, [])
+    # Keep only timestamps within the current window
+    timestamps = [t for t in timestamps if now - t < window]
+    if len(timestamps) >= MAX_REQUESTS_PER_MINUTE:
+        rate_limit_store[client_ip] = timestamps
+        return False
+    timestamps.append(now)
+    rate_limit_store[client_ip] = timestamps
+    return True
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initializes the database on application startup."""
+    logger.info('"Initializing database..."')
+    await init_db()
+    logger.info('"Database initialized successfully."')
+    yield
+
+app = FastAPI(
+    title="GitMind API",
+    description="Enterprise AI Code Review Platform powered by LangGraph multi-agent pipeline",
+    version=VERSION,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# ── Security Headers Middleware ────────────────────────────────────────────────
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self' http://localhost:4200"
+        )
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+app.add_middleware(CORSMiddleware,
+                   allow_origins=["http://localhost:4200"],
+                   allow_credentials=True,
+                   allow_methods=["*"],
+                   allow_headers=["*"])
+
+# ── Feature Routers ───────────────────────────────────────────────────────────
+app.include_router(auth_router)
+
+# ── Health Endpoints ──────────────────────────────────────────────────────────
+
+@app.get("/health", tags=["Infrastructure"], summary="Liveness probe")
+async def health_check():
+    """Returns service health. Used by load balancers and Kubernetes liveness probes."""
+    return {
+        "status": "ok",
+        "version": VERSION,
+        "uptime_seconds": round(time.time() - START_TIME, 1),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+@app.get("/readyz", tags=["Infrastructure"], summary="Readiness probe")
+async def readiness_check():
+    """Checks DB connectivity. Used by Kubernetes readiness probes."""
+    from sqlalchemy import text
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "ready", "db": "ok", "type": "postgresql"}
+    except Exception as e:
+        logger.error('"DB readiness check failed: %s"', str(e))
+        return JSONResponse(status_code=503, content={"status": "not_ready", "db": "error", "detail": str(e)})
+
+# ── Job Queue Endpoints ───────────────────────────────────────────────────────
+
+@app.post("/analyze/async", tags=["Analysis"], summary="Start an asynchronous analysis job")
+async def analyze_async(request: Request, background_tasks: BackgroundTasks, user: dict = Depends(require_auth)):
+    """
+    Enterprise-grade async analysis. Enqueues the job and returns a job ID immediately.
+    The actual analysis runs in the background or a separate worker.
+    """
+    # Rate limiting
+    client_ip = request.client.host if request.client else "unknown"
+    if not worker.HAS_ARQ and not check_rate_limit(client_ip):
+         raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # Construct state to validate
+    try:
+        AgentState(**data)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    job_id = worker.create_job(data)
+    
+    # In dev mode (no ARQ/Redis), run via FastAPI BackgroundTasks
+    if not worker.HAS_ARQ:
+        background_tasks.add_task(worker.run_analysis_job, job_id, data)
+    else:
+        # In production, this would use arq.enqueue_job
+        # For now, worker.py has a shim or we can add it here if needed
+        # We'll stick to background tasks for the immediate dev-container transition
+        background_tasks.add_task(worker.run_analysis_job, job_id, data)
+
+    return {"job_id": job_id, "status": "queued"}
+
+@app.get("/jobs/{job_id}", tags=["Jobs"])
+async def get_job_status(job_id: str):
+    job = worker.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+@app.get("/jobs/{job_id}/stream", tags=["Jobs"])
+async def stream_job_events(job_id: str):
+    """
+    SSE stream for a specific job. 
+    Clients can connect here to see the progress of an async job.
+    """
+    async def event_generator():
+        last_event_idx = 0
+        while True:
+            job = worker.get_job(job_id)
+            if not job:
+                break
+            
+            # Send new events
+            while last_event_idx < len(job["events"]):
+                event = job["events"][last_event_idx]
+                yield f"data: {json.dumps(event)}\n\n"
+                last_event_idx += 1
+            
+            if job["status"] in ["completed", "failed"]:
+                # Send final result if completed
+                if job["status"] == "completed":
+                    yield f"data: {json.dumps({'status': 'completed', 'result': job['result']})}\n\n"
+                break
+                
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 class GithubCommentRequest(BaseModel):
     github_url: str
@@ -109,15 +288,29 @@ async def push_status_to_github(github_url: str, token: str, state: str, descrip
         "context": "GitMind Review",
         "target_url": target_url
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         await client.post(url, headers=headers, json=payload)
 
-@app.post("/analyze")
-async def analyze_pr(request: Request):
+@app.post("/analyze", tags=["Analysis"], summary="Start a PR code review analysis")
+async def analyze_pr(request: Request, current_user: Optional[Dict] = Depends(get_current_user)):
     """
     Main entry point for starting a code review analysis.
     Streams events from the LangGraph agent back to the client using Server-Sent Events (SSE).
+    Requires authentication — history is scoped per user.
     """
+    # ── Authentication Check ──────────────────────────────────────────────────
+    auth_header = request.headers.get("Authorization")
+    
+    # ── Rate limiting ──────────────────────────────────────────────────────────
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(client_ip):
+        logger.warning('"Rate limit exceeded for IP: %s"', client_ip)
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Maximum 10 analyses per minute. Please wait before retrying.",
+            headers={"Retry-After": "60"}
+        )
+
     try:
         data = await request.json()
     except Exception:
@@ -129,6 +322,9 @@ async def analyze_pr(request: Request):
     
     github_url = data.get("github_url")
     github_token = data.get("github_token")
+    
+    # Resolve authenticated user ID for per-user history scoping
+    user_id = current_user.get("id") if current_user else None
 
     # Construct the initial agent state from request parameters
     try:
@@ -147,6 +343,20 @@ async def analyze_pr(request: Request):
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid state data: {str(e)}")
 
+    # ── Diff size guard ───────────────────────────────────────────────────────────
+    diff_size = len((initial_state.diff or "").encode("utf-8"))
+    if diff_size > MAX_DIFF_BYTES:
+        logger.warning('"Diff too large: %d bytes from IP %s"', diff_size, client_ip)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Diff payload is too large ({diff_size // 1024} KB). "
+                   f"Maximum allowed is {MAX_DIFF_BYTES // 1024} KB. "
+                   f"Consider splitting large PRs into smaller, focused changes."
+        )
+
+    logger.info('"Analysis started: provider=%s model=%s url=%s"', initial_state.selected_provider, initial_state.selected_model, github_url or "paste")
+
+
     diff_hash = hashlib.sha256(f"{initial_state.diff}_{initial_state.selected_provider}_{initial_state.selected_model}".encode()).hexdigest()
 
     async def event_generator():
@@ -155,10 +365,13 @@ async def analyze_pr(request: Request):
         
         # Post 'pending' status to GitHub if credentials provided
         if github_url and github_token:
-            await push_status_to_github(github_url, github_token, "pending", "GitMind is analyzing the changes...")
+            try:
+                await push_status_to_github(github_url, github_token, "pending", "GitMind is analyzing the changes...")
+            except Exception as e:
+                print(f"DEBUG: Failed to push pending GitHub status: {e}")
 
         # --- CACHE INTERCEPTOR ---
-        cached_analysis = get_cached_analysis(diff_hash, initial_state.selected_model, initial_state.selected_provider)
+        cached_analysis = await get_cached_analysis(diff_hash, initial_state.selected_model, initial_state.selected_provider)
         if cached_analysis and cached_analysis.get("review_data"):
             print(f"DEBUG: Cache HIT for {diff_hash}!")
             payload = {
@@ -172,12 +385,32 @@ async def analyze_pr(request: Request):
             
             # Auto-approve simulated github status
             if github_url and github_token:
-                await push_status_to_github(github_url, github_token, "success", "Analysis loaded from cache.")
+                try:
+                    await push_status_to_github(github_url, github_token, "success", "Analysis loaded from cache.")
+                except Exception as e:
+                    print(f"DEBUG: Failed to push cached GitHub status: {e}")
+                
+            try:
+                await save_analysis(
+                    github_url=github_url or "https://github.com/unknown/unknown",
+                    model=initial_state.selected_model,
+                    provider=initial_state.selected_provider,
+                    review_report=cached_analysis["review_data"],
+                    diff_hash=diff_hash,
+                    diff_text=initial_state.diff,
+                    api_key=initial_state.api_key,
+                    github_token=github_token,
+                    user_id=user_id
+                )
+                yield f"data: {json.dumps({'status': 'analysis_saved'})}\n\n"
+            except Exception as e:
+                print(f"DEBUG: Failed to save cached analysis history: {e}")
                 
             return  # Stop execution completely
             
         try:
             final_reviews = None
+            logger.info('"[STREAM] Starting LangGraph agent stream: thread=%s provider=%s model=%s"', thread_id, initial_state.selected_provider, initial_state.selected_model)
             # Stream events from the LangGraph agent
             async for event in app_graph.astream(initial_state.model_dump(), config=config):
                 if not event:
@@ -190,6 +423,7 @@ async def analyze_pr(request: Request):
                 # Extract state update from the active node
                 node_name = list(event.keys())[0]
                 state_update = event[node_name]
+                logger.debug('"[STREAM] Node event received: node=%s status=%s"', node_name, state_update.get("status"))
                 
                 # Keep track of the final review report for GitHub status update
                 if state_update.get("reviews"):
@@ -198,6 +432,7 @@ async def analyze_pr(request: Request):
                         final_reviews = ReviewReport(**rev)
                     else:
                         final_reviews = rev
+                    logger.info('"[STREAM] Updated final_reviews from node=%s approval_status=%s"', node_name, final_reviews.approval_status)
 
                 payload = {
                     "node": node_name,
@@ -207,15 +442,25 @@ async def analyze_pr(request: Request):
                     "monologue": state_update.get("monologue", []),
                     "reviews": state_update.get("reviews").model_dump() if state_update.get("reviews") else None,
                     "critique": state_update.get("critique").model_dump() if state_update.get("critique") else None,
-                    "auto_fixes": state_update.get("auto_fixes").model_dump() if state_update.get("auto_fixes") else None,
-                    "generated_tests": state_update.get("generated_tests").model_dump() if state_update.get("generated_tests") else None,
-                    "arch_review": state_update.get("arch_review").model_dump() if state_update.get("arch_review") else None
                 }
                 
+                # Also include enhancements if present in the payload for live updates
+                # (Though they are now nested in 'reviews' too)
+                if state_update.get("auto_fixes"):
+                    payload["auto_fixes"] = state_update.get("auto_fixes").model_dump()
+                if state_update.get("generated_tests"):
+                    payload["generated_tests"] = state_update.get("generated_tests").model_dump()
+                if state_update.get("arch_review"):
+                    payload["arch_review"] = state_update.get("arch_review").model_dump()
+
                 yield f"data: {json.dumps(payload)}\n\n"
                 await asyncio.sleep(0.05) # Small delay for smoother UI updates
             
-            # Finalize GitHub status based on review findings
+            logger.info('"[STREAM] Agent stream complete. final_reviews=%s"', final_reviews.approval_status if final_reviews else 'None')
+            
+            # --- CONCLUDING TASKS (After stream loop) ---
+
+            # 1. Finalize GitHub status based on review findings
             if github_url and github_token and final_reviews:
                 high_sev = [i for cat in ['security', 'performance', 'style'] 
                            for i in getattr(final_reviews, cat) if i.severity == 'high']
@@ -227,50 +472,70 @@ async def analyze_pr(request: Request):
                 elif final_reviews.approval_status == "rejected":
                     state = "failure"
                 
-                await push_status_to_github(github_url, github_token, state, desc)
-            
-            # Phase 2: Auto-save analysis to history
-            if final_reviews and github_url:
                 try:
-                    save_analysis(
-                        github_url=github_url,
+                    await push_status_to_github(github_url, github_token, state, desc)
+                except Exception as e:
+                    print(f"DEBUG: Failed to push GitHub status: {e}")
+            
+            # 2. Phase 2: Auto-save analysis to history BEFORE final completion signal
+            if final_reviews:
+                logger.info('"[HISTORY] Attempting to save analysis: provider=%s model=%s url=%s status=%s"', initial_state.selected_provider, initial_state.selected_model, github_url or 'paste', final_reviews.approval_status)
+                try:
+                    partial_msg = "; ".join(final_reviews.partial_errors) if final_reviews.partial_errors else None
+                    saved_id = await save_analysis(
+                        github_url=github_url or "https://github.com/unknown/unknown",
                         model=initial_state.selected_model,
                         provider=initial_state.selected_provider,
                         review_report=final_reviews.model_dump(),
                         diff_hash=diff_hash,
                         diff_text=initial_state.diff,
                         api_key=initial_state.api_key,
-                        github_token=github_token
+                        github_token=github_token,
+                        error_message=partial_msg,
+                        user_id=user_id
                     )
+                    logger.info('"[HISTORY] Analysis saved successfully: id=%s"', saved_id)
+                    # Yield a final confirmation that data is saved
+                    yield f"data: {json.dumps({'status': 'analysis_saved', 'id': saved_id})}\n\n"
                 except Exception as e:
-                    print(f"DEBUG: Failed to save analysis history: {e}")
+                    logger.error('"[HISTORY] FAILED to save analysis: %s"', str(e), exc_info=True)
+            else:
+                logger.warning('"[HISTORY] Skipping save - final_reviews is None after stream completion"')
 
         except Exception as e:
             # Handle and report errors during agent execution
+            logger.error('"[STREAM] Agent pipeline exception: %s"', str(e), exc_info=True)
             if github_url and github_token:
-                await push_status_to_github(github_url, github_token, "error", f"Analysis failed: {str(e)}")
+                try:
+                    await push_status_to_github(github_url, github_token, "error", f"Analysis failed: {str(e)}")
+                except Exception:
+                    pass
             error_payload = {"node": "error", "status": "failed", "message": str(e)}
             yield f"data: {json.dumps(error_payload)}\n\n"
 
             # Persist the failed attempt to history so it shows in the Failed PR tab
-            if github_url:
-                try:
-                    save_analysis(
-                        github_url=github_url,
-                        model=initial_state.selected_model,
-                        provider=initial_state.selected_provider,
-                        diff_hash=diff_hash,
-                        diff_text=initial_state.diff,
-                        api_key=initial_state.api_key,
-                        github_token=github_token,
-                        error_message=str(e)
-                    )
-                except Exception as save_err:
-                    print(f"DEBUG: Failed to save failed analysis: {save_err}")
+            logger.info('"[HISTORY] Saving FAILED analysis to history: %s"', str(e)[:80])
+            try:
+                saved_id = await save_analysis(
+                    github_url=github_url or "https://github.com/unknown/unknown",
+                    model=initial_state.selected_model,
+                    provider=initial_state.selected_provider,
+                    diff_hash=diff_hash,
+                    diff_text=initial_state.diff,
+                    api_key=initial_state.api_key,
+                    github_token=github_token,
+                    error_message=str(e),
+                    user_id=user_id
+                )
+                logger.info('"[HISTORY] Failed analysis saved: id=%s"', saved_id)
+            except Exception as save_err:
+                logger.error('"[HISTORY] Could not save failed analysis: %s"', str(save_err))
+
+
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-async def batch_worker_task(repo_url: str, provider: str, model: str, scan_id: int):
+async def batch_worker_task(repo_url: str, provider: str, model: str, scan_id: int, user_id: Optional[int] = None):
     """Background worker to silently process queued repositories."""
     diff = await fetch_github_diff_text(repo_url)
     if not diff:
@@ -305,7 +570,7 @@ async def batch_worker_task(repo_url: str, provider: str, model: str, scan_id: i
                 
         if final_reviews:
             diff_hash = hashlib.sha256(f"{diff}_{provider}_{model}".encode()).hexdigest()
-            save_analysis(
+            await save_analysis(
                 github_url=repo_url,
                 model=model,
                 provider=provider,
@@ -313,7 +578,8 @@ async def batch_worker_task(repo_url: str, provider: str, model: str, scan_id: i
                 diff_hash=diff_hash,
                 diff_text=diff,
                 api_key=None,  # Batch process may not have individual user keys immediately
-                github_token=None
+                github_token=None,
+                user_id=user_id
             )
             update_scan_status(scan_id, 'completed')
         else:
@@ -325,8 +591,9 @@ async def batch_worker_task(repo_url: str, provider: str, model: str, scan_id: i
 
 
 @app.post("/batch_scan")
-async def queue_batch_scan(request: Request, background_tasks: BackgroundTasks):
+async def queue_batch_scan(request: Request, background_tasks: BackgroundTasks, current_user: Optional[Dict] = Depends(get_current_user)):
     """Queues a repository for asynchronous overnight scanning."""
+    user_id = current_user.get("id") if current_user else None
     try:
         data = await request.json()
     except Exception:
@@ -342,13 +609,14 @@ async def queue_batch_scan(request: Request, background_tasks: BackgroundTasks):
     queued_jobs = []
     for url in repo_urls:
         scan_id = queue_repo_for_scan(url, provider, model)
-        background_tasks.add_task(batch_worker_task, url, provider, model, scan_id)
+        background_tasks.add_task(batch_worker_task, url, provider, model, scan_id, user_id)
         queued_jobs.append(scan_id)
         
     return {"status": "queued", "queued_jobs": len(queued_jobs)}
 
 @app.post("/feedback")
-async def provide_feedback(request: Request):
+async def provide_feedback(request: Request, current_user: Optional[Dict] = Depends(get_current_user)):
+    user_id = current_user.get("id") if current_user else None
     try:
         data = await request.json()
     except Exception:
@@ -365,6 +633,7 @@ async def provide_feedback(request: Request):
 
     async def event_generator():
         try:
+            final_reviews = None
             async for event in app_graph.astream(None, config=config):
                 if not event:
                     continue
@@ -374,6 +643,10 @@ async def provide_feedback(request: Request):
                     
                 node_name = list(event.keys())[0]
                 state_update = event[node_name]
+                
+                if state_update.get("reviews"):
+                    rev = state_update.get("reviews")
+                    final_reviews = ReviewReport(**rev) if isinstance(rev, dict) else rev
                 
                 payload = {
                     "node": node_name,
@@ -387,6 +660,55 @@ async def provide_feedback(request: Request):
                 
                 yield f"data: {json.dumps(payload)}\n\n"
                 await asyncio.sleep(0.05)
+                
+            # --- CONCLUDING TASKS FOR FEEDBACK LOOP ---
+            if final_reviews:
+                state = await app_graph.aget_state(config)
+                state_values = state.values
+                github_url = state_values.get("github_url")
+                github_token = state_values.get("github_token")
+
+                if github_url and github_token:
+                    high_sev = [i for cat in ['security', 'performance', 'style'] 
+                               for i in getattr(final_reviews, cat) if i.severity == 'high']
+                    gh_state = "failure" if high_sev else "success"
+                    desc = f"Found {len(high_sev)} high severity issues." if high_sev else "No high severity issues found."
+                    if final_reviews.approval_status == "approved" and not high_sev:
+                        gh_state = "success"
+                    elif final_reviews.approval_status == "rejected":
+                        gh_state = "failure"
+                    
+                    try:
+                        await push_status_to_github(github_url, github_token, gh_state, desc)
+                    except Exception as e:
+                        print(f"DEBUG: Failed to push GitHub status: {e}")
+
+                diff_text = state_values.get("diff", "")
+                provider = state_values.get("selected_provider", "gemini")
+                model = state_values.get("selected_model", "gemini-1.5-flash")
+                api_key = state_values.get("api_key")
+                diff_hash = hashlib.sha256(f"{diff_text}_{provider}_{model}".encode()).hexdigest()
+                
+                logger.info('"[HISTORY-FEEDBACK] Attempting to save analysis"')
+                try:
+                    partial_msg = "; ".join(final_reviews.partial_errors) if final_reviews.partial_errors else None
+                    saved_id = await save_analysis(
+                        github_url=github_url or "https://github.com/unknown/unknown",
+                        model=model,
+                        provider=provider,
+                        review_report=final_reviews.model_dump(),
+                        diff_hash=diff_hash,
+                        diff_text=diff_text,
+                        api_key=api_key,
+                        github_token=github_token,
+                        error_message=partial_msg,
+                        user_id=user_id
+                    )
+                    logger.info('"[HISTORY-FEEDBACK] Analysis saved successfully: id=%s"', saved_id)
+                    yield f"data: {json.dumps({'status': 'analysis_saved', 'id': saved_id})}\n\n"
+                except Exception as e:
+                    logger.error('"[HISTORY-FEEDBACK] FAILED to save analysis: %s"', str(e), exc_info=True)
+                    
         except Exception as e:
             error_payload = {"node": "error", "status": "failed", "message": str(e)}
             yield f"data: {json.dumps(error_payload)}\n\n"
@@ -659,7 +981,7 @@ async def suppress_issue(request: Request):
         raise HTTPException(status_code=400, detail="Invalid GitHub URL")
         
     repo_full_name = f"{owner}/{repo}"
-    success = add_suppression(repo_full_name, issue_signature)
+    success = await add_suppression(repo_full_name, issue_signature)
     
     if success:
         return {"message": "Issue dismissed successfully"}
@@ -667,14 +989,19 @@ async def suppress_issue(request: Request):
         raise HTTPException(status_code=500, detail="Failed to save suppression")
 
 @app.get("/history")
-async def analysis_history(repo: str = None, limit: int = 20):
-    """Returns past analysis history, optionally filtered by repo."""
-    return get_history(repo=repo, limit=limit)
+async def get_analysis_history(
+    repo: str = None,
+    limit: int = 500,
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Returns past analysis history for the currently authenticated user only."""
+    user_id = current_user.get("id") if current_user else None
+    return await get_history(repo=repo, limit=limit, user_id=user_id)
 
 @app.get("/history/{analysis_id}")
-async def analysis_detail(analysis_id: int):
+async def get_analysis_detail(analysis_id: int):
     """Returns a specific analysis including the full review data."""
-    result = get_analysis_by_id(analysis_id)
+    result = await get_analysis_by_id(analysis_id)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return result

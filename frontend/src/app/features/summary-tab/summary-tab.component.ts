@@ -1,5 +1,6 @@
 import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DashboardMetrics } from '../../core/models';
 
 @Component({
   selector: 'app-summary-tab',
@@ -11,6 +12,7 @@ import { CommonModule } from '@angular/common';
 export class SummaryTabComponent {
   @Input() analysisData: any;
   @Input() critiqueData: any;
+  @Input() metrics: DashboardMetrics | null = null;
 
   getApprovalInfo() {
     const data = this.analysisData;

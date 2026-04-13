@@ -3,6 +3,12 @@
   <!-- ── Header bar ─────────────────────────────────────────────────────────── -->
   <div class="history-header-bar">
     <span class="history-title">📂 Audit Ledger &amp; History</span>
+    <div class="history-header-actions">
+      <button class="export-btn" (click)="exportCsv()" title="Export visible rows as CSV"
+              id="export-csv-btn">
+        <span>⬇</span> Export CSV
+      </button>
+    </div>
   </div>
 
   <!-- ── Sub-tab bar: Reviewed PR | Failed PR ──────────────────────────────── -->
@@ -18,10 +24,19 @@
     </button>
     <button
       class="history-sub-tab"
+      [class.active]="activeTab() === 'partial'"
+      (click)="switchTab('partial')"
+      id="history-partial-tab">
+      <span class="sub-tab-icon">🟡</span>
+      Partial Pass PR
+      <span class="sub-tab-badge partial" *ngIf="partialHistory().length > 0">{{ partialHistory().length }}</span>
+    </button>
+    <button
+      class="history-sub-tab"
       [class.active]="activeTab() === 'failed'"
       (click)="switchTab('failed')"
       id="history-failed-tab">
-      <span class="sub-tab-icon">⚠️</span>
+      <span class="sub-tab-icon">🔴</span>
       Failed PR
       <span class="sub-tab-badge fail" *ngIf="failedHistory().length > 0">{{ failedHistory().length }}</span>
     </button>
@@ -62,7 +77,7 @@
               {{ h.approval_status === 'approved' ? '✓' : h.approval_status === 'rejected' ? '✗' : '!' }}
             </span>
           </td>
-          <td class="date-cell">{{ h.created_at | date:'short' }}</td>
+          <td class="date-cell">{{ h.created_at | date:'medium' }} IST</td>
           <td class="repo-cell">
             <div class="repo-name">{{ h.repo }}</div>
             <div class="repo-url">{{ h.github_url }}</div>
@@ -76,6 +91,68 @@
           <td colspan="6" class="empty-table">
             <span class="empty-icon">📂</span>
             <span class="empty-text">No reviewed PRs match these filters.</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!--  PARTIAL PASS PR TABLE                                                   -->
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <div class="table-scroll-viewport" *ngIf="activeTab() === 'partial'">
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th style="width: 5%">Status</th>
+          <th style="width: 13%">Date</th>
+          <th style="width: 22%">Repository / PR</th>
+          <th style="width: 10%">Model</th>
+          <th style="width: 13%">LLM API Key</th>
+          <th style="width: 12%">Error Type</th>
+          <th style="width: 25%">Failed Reason</th>
+        </tr>
+        <tr class="filter-row">
+          <th></th>
+          <th><input type="text" placeholder="Filter date..." [ngModel]="filterDate()"
+              (ngModelChange)="filterDate.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter repo..." [ngModel]="filterUrl()"
+              (ngModelChange)="filterUrl.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter model..." [ngModel]="filterModel()"
+              (ngModelChange)="filterModel.set($event); onFilterChange()"></th>
+          <th><input type="text" placeholder="Filter key..." [ngModel]="filterLlmKey()"
+              (ngModelChange)="filterLlmKey.set($event); onFilterChange()"></th>
+          <th></th>
+          <th><input type="text" placeholder="Filter reason..." [ngModel]="filterFailReason()"
+              (ngModelChange)="filterFailReason.set($event); onFilterChange()"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let h of paginatedHistory()" (click)="loadPastAnalysisAction.emit(h)" class="history-row partial-row">
+          <td class="status-cell">
+            <span class="status-indicator" [ngClass]="'status-' + h.approval_status">
+              {{ h.approval_status === 'approved' ? '✓' : h.approval_status === 'rejected' ? '✗' : '!' }}
+            </span>
+          </td>
+          <td class="date-cell">{{ h.created_at | date:'medium' }} IST</td>
+          <td class="repo-cell">
+            <div class="repo-name">{{ h.repo }}</div>
+            <div class="repo-url">{{ h.github_url }}</div>
+          </td>
+          <td class="model-cell">{{ h.model }}</td>
+          <td class="key-cell font-mono">{{ maskToken(h.api_key) }}</td>
+          <td class="error-type-cell">
+            <span class="error-type-badge partial-error-badge">{{ classifyError(h.error_message) }}</span>
+          </td>
+          <td class="fail-reason-cell" [attr.data-tooltip]="h.error_message">
+            {{ truncate(h.error_message) }}
+          </td>
+        </tr>
+
+        <tr *ngIf="filteredHistory().length === 0">
+          <td colspan="7" class="empty-table">
+            <span class="empty-icon">🎉</span>
+            <span class="empty-text">No partial PR analyses matches these filters.</span>
           </td>
         </tr>
       </tbody>
@@ -113,7 +190,7 @@
       </thead>
       <tbody>
         <tr *ngFor="let h of paginatedHistory()" class="history-row failed-row">
-          <td class="date-cell">{{ h.created_at | date:'short' }}</td>
+          <td class="date-cell">{{ h.created_at | date:'medium' }} IST</td>
           <td class="repo-cell">
             <div class="repo-name">{{ h.repo }}</div>
             <div class="repo-url">{{ h.github_url }}</div>

@@ -75,6 +75,7 @@ export interface TabDef {
     .nav-rail {
       width: 92px;
       min-width: 92px;
+      height:100%;
       background: var(--bg1);
       border-right: 1px solid var(--border);
       display: flex;
@@ -188,9 +189,9 @@ export class TabsBarComponent {
 
   coreTabs(): TabDef[] {
     const tabs: TabDef[] = [];
-    if (this.analysisHistory?.length) {
-      tabs.push({ id: 'history', icon: '📂', label: 'History', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });
-    }
+    // Always allow history access
+    tabs.push({ id: 'history', icon: '📂', label: 'History', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });
+
     if (this.diffInput) {
       tabs.push({ id: 'diff', icon: '🔍', label: 'Diff', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });
       tabs.push({ id: 'logs', icon: '📝', label: 'Logs', group: 'core', color: '#00ffa3', glow: 'rgba(0,255,163,0.4)' });
@@ -220,13 +221,17 @@ export class TabsBarComponent {
 
   extraTabs(): TabDef[] {
     const tabs: TabDef[] = [];
-    if (this.autoFixes) {
+    const hasFixes = this.autoFixes || this.analysisData?.auto_fixes;
+    const hasTests = this.generatedTests || this.analysisData?.generated_tests;
+    const hasArch = this.archReview || this.analysisData?.arch_review;
+
+    if (hasFixes) {
       tabs.push({ id: 'autofix', icon: '🔧', label: 'Auto-Fix', group: 'extras', color: '#a78bfa', glow: 'rgba(167,139,250,0.4)' });
     }
-    if (this.generatedTests) {
+    if (hasTests) {
       tabs.push({ id: 'tests', icon: '🧪', label: 'Tests', group: 'extras', color: '#a78bfa', glow: 'rgba(167,139,250,0.4)' });
     }
-    if (this.archReview) {
+    if (hasArch) {
       tabs.push({ id: 'arch', icon: '🏗️', label: 'Arch', group: 'extras', color: '#a78bfa', glow: 'rgba(167,139,250,0.4)' });
     }
     return tabs;

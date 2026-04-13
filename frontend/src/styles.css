@@ -198,6 +198,82 @@ header {
   opacity: 0.9;
 }
 
+/* ──── NEW HUD & GLASS UTILITIES ──── */
+.glass-panel {
+  background: rgba(17, 24, 40, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+}
+
+.glass-card {
+  background: rgba(24, 32, 58, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top left, rgba(255,255,255, 0.05), transparent);
+  pointer-events: none;
+}
+
+.glass-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--border-strong);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 255, 163, 0.05);
+}
+
+.hud-gradient-text {
+  background: linear-gradient(135deg, #fff 0%, var(--text2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.g-text {
+  background: linear-gradient(135deg, var(--g) 0%, #00c97d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ──── ANIMATIONS ──── */
+@keyframes dash {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes neural-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 255, 163, 0.4); }
+  70% { box-shadow: 0 0 0 15px rgba(0, 255, 163, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 255, 163, 0); }
+}
+
+.pulse-g {
+  animation: neural-pulse 2s infinite;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+  animation: slideUp 0.5s ease forwards;
+}
+
 .sidebar-content {
   flex: 1;
   overflow-y: auto;
@@ -967,43 +1043,34 @@ header {
   overflow: hidden;
 }
 
-/* Skeleton loader for tab transitions */
+/* Skeleton loader for tab transitions - Upgraded to Neural Glass */
 .tab-skeleton {
-  padding: 20px 0;
+  padding: 40px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
 .skeleton-pulse {
-  height: 18px;
-  border-radius: 8px;
+  height: 24px;
+  border-radius: 12px;
   background: linear-gradient(90deg,
-      var(--bg2) 0%,
-      var(--bg3) 40%,
-      var(--bg2) 80%);
-  background-size: 300% 100%;
-  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(0, 255, 163, 0.1) 50%,
+      rgba(255, 255, 255, 0.03) 100%);
+  background-size: 200% 100%;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  animation: neural-skeleton-pulse 1.5s ease-in-out infinite;
 }
 
-.skeleton-pulse.short {
-  width: 45%;
-  height: 14px;
-}
+.skeleton-pulse.short { width: 30%; height: 16px; }
+.skeleton-pulse.medium { width: 60%; height: 16px; }
 
-.skeleton-pulse.medium {
-  width: 70%;
-  height: 14px;
-}
-
-@keyframes skeleton-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-
-  100% {
-    background-position: -100% 0;
-  }
+@keyframes neural-skeleton-pulse {
+  0% { background-position: 100% 0; opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { background-position: -100% 0; opacity: 0.5; }
 }
 
 /* Approval badge */
@@ -4512,7 +4579,26 @@ header {
   border: 1px solid rgba(248, 113, 113, 0.25);
 }
 
-/* ──── FAILED PR TABLE SPECIFICS ──── */
+.sub-tab-badge.partial {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+
+/* ──── PARTIAL PASS PR TABLE SPECIFICS ──── */
+
+.partial-row {
+  cursor: pointer !important;
+}
+
+.partial-row:hover {
+  background: rgba(251, 191, 36, 0.05) !important;
+  border-color: rgba(251, 191, 36, 0.15) !important;
+}
+
+.partial-row .fail-reason-cell {
+  color: #fbbf24;
+}
 
 .failed-row {
   cursor: default !important;
@@ -4538,6 +4624,12 @@ header {
   border: 1px solid rgba(248, 113, 113, 0.2);
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.partial-error-badge {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.25);
 }
 
 .fail-reason-cell {
@@ -4630,5 +4722,47 @@ header {
 /* Make fail-reason-cell overflow visible so the tooltip can escape the clipped td */
 .fail-reason-cell {
   overflow: visible !important;
+}
+
+
+/* ──── HISTORY EXPORT BUTTON ──── */
+
+.history-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.02em;
+}
+
+.export-btn:hover {
+  background: rgba(0, 255, 163, 0.08);
+  border-color: rgba(0, 255, 163, 0.3);
+  color: var(--g);
+}
+
+.export-btn span {
+  font-size: 12px;
 }
 

@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+gunicorn
 langgraph
 langchain
 langchain-anthropic
@@ -12,3 +13,13 @@ httpx
 tenacity
 langgraph-checkpoint-sqlite
 pyyaml
+PyJWT
+arq
+redis
+sqlalchemy
+asyncpg
+alembic
+cryptography
+slowapi
+structlog
+python-multipart
