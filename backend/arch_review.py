@@ -32,16 +32,17 @@ Your job is to analyze the architectural implications and generate a dependency 
 
 TASKS:
 1. Generate a **Mermaid flowchart** showing how the CHANGED files relate to each other:
-   - Use `graph TD` (top-down) format
-   - Show imports, function calls, and data flow between files
-   - Use meaningful labels (not just file names)
-   - Color-code nodes: green for new files, orange for modified, gray for unchanged dependencies
+   - Use `graph TD` (top-down) format.
+   - Show imports, function calls, and data flow between files.
+   - Use meaningful labels (not just file names).
+   - **CRITICAL**: If a node label contains dots (e.g., `app.component.ts`), it MUST be wrapped in double quotes: `A["app.component.ts"]`.
+   - Color-code nodes: green for new files, orange for modified, gray for unchanged dependencies.
    - Example format:
      ```
      graph TD
-       A[auth.ts] -->|imports| B[db.ts]
-       B -->|queries| C[(Database)]
-       A -->|validates| D[middleware.ts]
+       A["auth.service.ts"] -->|imports| B["db.ts"]
+       B -->|queries| C[("Database")]
+       A -->|validates| D["middleware.ts"]
      ```
 
 2. Identify architectural observations:
@@ -54,10 +55,11 @@ TASKS:
 3. Provide a concise architecture summary.
 
 RULES:
-- The Mermaid code must be VALID and renderable.
-- Do NOT wrap the mermaid code in markdown code fences — just output the raw diagram.
-- Focus only on files touched in the diff.
-- Include at most 15 nodes in the diagram to keep it readable.
+- **CRITICAL**: Use spaces around arrows for clarity: `A --> B` instead of `A-->B`.
+- The Mermaid code must be VALID and renderable by Mermaid.js.
+- **Do NOT wrap the mermaid code in markdown code fences — just output the raw diagram text.**
+- Focus only on top 10-12 most critical files touched in the diff. Group them into subgraphs by directory if there are many files.
+- Include at most 12 nodes in the diagram to maintain readability.
 - Start node IDs with letters (not numbers).
 
 Respond in the exact JSON schema provided."""

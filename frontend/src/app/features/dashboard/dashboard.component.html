@@ -130,11 +130,7 @@
 
           <!-- Analytics Dashboard Tab -->
           <div class="tab-panel active" *ngIf="currentTab() === 'analytics'">
-            @defer (on interaction) {
-              <app-analytics-dashboard *ngIf="dashboardMetrics()" [metrics]="dashboardMetrics()!"></app-analytics-dashboard>
-            } @placeholder {
-              <div class="skeleton-hud"></div>
-            }
+            <app-analytics-dashboard *ngIf="dashboardMetrics()" [metrics]="dashboardMetrics()!"></app-analytics-dashboard>
             <div class="empty-state" *ngIf="!dashboardMetrics()">
               <div class="empty-icon" aria-label="Chart icon representing empty analytics" aria-hidden="false">📊</div>
               <div class="empty-text">No analytics data available.</div>
@@ -154,22 +150,18 @@
             </div>
           </div>
 
-          <!-- Diff Tab — Lazy rendered -->
+          <!-- Diff Tab — Immediate rendering -->
           <div class="tab-panel active" *ngIf="currentTab() === 'diff'">
-            @defer (on interaction) {
-              <app-diff-viewer *ngIf="diffInput()" [files]="parsedFiles()"></app-diff-viewer>
-            } @placeholder {
-              <div class="skeleton-hud"></div>
-            }
+            <app-diff-viewer *ngIf="diffInput()" [files]="parsedFiles()"></app-diff-viewer>
             <div class="empty-state" *ngIf="!diffInput()">
               <div class="empty-icon" aria-label="Magnifying glass representing no diff loaded" aria-hidden="false">🔍</div>
               <div class="empty-text">No diff loaded. Fetch a pull request to see changes.</div>
             </div>
           </div>
 
-          <!-- Summary Tab — Lazy rendered -->
+          <!-- Summary Tab — More active defer -->
           <div class="tab-panel active" *ngIf="currentTab() === 'summary'">
-            @defer (on idle) {
+            @defer (on viewport; prefetch on idle) {
               <app-summary-tab *ngIf="analysisData()" 
                 [analysisData]="analysisData()" 
                 [critiqueData]="critiqueData()"
@@ -255,11 +247,7 @@
           </div>
 
           <div class="tab-panel active" *ngIf="currentTab() === 'arch'">
-            @defer (on interaction) {
-              <app-arch-tab *ngIf="archReview()" [archReview]="archReview()"></app-arch-tab>
-            } @placeholder {
-              <div class="skeleton-hud"></div>
-            }
+            <app-arch-tab *ngIf="archReview()" [archReview]="archReview()"></app-arch-tab>
             <div class="empty-state" *ngIf="!archReview()">
               <div class="empty-icon">🏗️</div>
               <div class="empty-text">No architectural review provided.</div>

@@ -58,6 +58,9 @@ export class DiffViewerComponent implements OnChanges {
   }
 
   private highlightCode(code: string): SafeHtml {
+    if (!code || code.length === 0) {
+      return this.sanitizer.bypassSecurityTrustHtml('');
+    }
     const rawContent = code.substring(1);
     const highlighted = hljs.highlightAuto(rawContent).value;
     const marker = `<span class="diff-marker">${code.charAt(0)}</span>`;
